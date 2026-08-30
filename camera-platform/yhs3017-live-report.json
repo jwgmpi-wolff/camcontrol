@@ -1,0 +1,193 @@
+{
+  "TimestampUtc": "2026-08-08T19:29:26.2137847Z",
+  "TargetModel": "YI Outdoor Camera 1080p YHS.3017",
+  "SubnetScanned": "10.0.0.0/24",
+  "PortsChecked": [
+    80,
+    443,
+    554,
+    8080,
+    8000,
+    8899,
+    1900
+  ],
+  "DevicesFound": 8,
+  "Devices": [
+    {
+      "IPAddress": "10.0.0.221",
+      "Hostname": null,
+      "MacAddress": "94-18-65-6e-4a-f4",
+      "OpenPorts": [
+        80
+      ],
+      "RtspLikely": false,
+      "HttpLikely": true,
+      "HttpsLikely": false,
+      "OnvifCandidate": true,
+      "RtspCandidates": null,
+      "SafeNextSteps": [
+        "Confirm this device belongs to your YI YHS.3017 via router DHCP table or YI app.",
+        "HTTP port open. Check for local admin page with your browser.",
+        "ONVIF port may be open. Test with an ONVIF client and your credentials.",
+        "Do NOT attempt brute-force or default credentials."
+      ]
+    },
+    {
+      "IPAddress": "10.0.0.28",
+      "Hostname": null,
+      "MacAddress": "5c-62-5a-f4-bf-a4",
+      "OpenPorts": [
+        80,
+        443
+      ],
+      "RtspLikely": false,
+      "HttpLikely": true,
+      "HttpsLikely": true,
+      "OnvifCandidate": true,
+      "RtspCandidates": null,
+      "SafeNextSteps": [
+        "Confirm this device belongs to your YI YHS.3017 via router DHCP table or YI app.",
+        "HTTP port open. Check for local admin page with your browser.",
+        "ONVIF port may be open. Test with an ONVIF client and your credentials.",
+        "Do NOT attempt brute-force or default credentials."
+      ]
+    },
+    {
+      "IPAddress": "10.0.0.236",
+      "Hostname": null,
+      "MacAddress": "0c-95-05-f8-c6-ec",
+      "OpenPorts": [
+        80
+      ],
+      "RtspLikely": false,
+      "HttpLikely": true,
+      "HttpsLikely": false,
+      "OnvifCandidate": true,
+      "RtspCandidates": null,
+      "SafeNextSteps": [
+        "Confirm this device belongs to your YI YHS.3017 via router DHCP table or YI app.",
+        "HTTP port open. Check for local admin page with your browser.",
+        "ONVIF port may be open. Test with an ONVIF client and your credentials.",
+        "Do NOT attempt brute-force or default credentials."
+      ]
+    },
+    {
+      "IPAddress": "10.0.0.188",
+      "Hostname": null,
+      "MacAddress": "38-1f-26-ac-9a-d7",
+      "OpenPorts": [
+        80,
+        443
+      ],
+      "RtspLikely": false,
+      "HttpLikely": true,
+      "HttpsLikely": true,
+      "OnvifCandidate": true,
+      "RtspCandidates": null,
+      "SafeNextSteps": [
+        "Confirm this device belongs to your YI YHS.3017 via router DHCP table or YI app.",
+        "HTTP port open. Check for local admin page with your browser.",
+        "ONVIF port may be open. Test with an ONVIF client and your credentials.",
+        "Do NOT attempt brute-force or default credentials."
+      ]
+    },
+    {
+      "IPAddress": "10.0.0.251",
+      "Hostname": null,
+      "MacAddress": "00-7c-2d-b4-ff-f3",
+      "OpenPorts": [
+        8080
+      ],
+      "RtspLikely": false,
+      "HttpLikely": true,
+      "HttpsLikely": false,
+      "OnvifCandidate": false,
+      "RtspCandidates": null,
+      "SafeNextSteps": [
+        "Confirm this device belongs to your YI YHS.3017 via router DHCP table or YI app.",
+        "HTTP port open. Check for local admin page with your browser.",
+        "Do NOT attempt brute-force or default credentials."
+      ]
+    },
+    {
+      "IPAddress": "10.0.0.1",
+      "Hostname": "Pratham.fareast.corp.microsoft.com",
+      "MacAddress": "f8-d0-0e-b2-7f-c7",
+      "OpenPorts": [
+        80,
+        443
+      ],
+      "RtspLikely": false,
+      "HttpLikely": true,
+      "HttpsLikely": true,
+      "OnvifCandidate": true,
+      "RtspCandidates": null,
+      "SafeNextSteps": [
+        "Confirm this device belongs to your YI YHS.3017 via router DHCP table or YI app.",
+        "HTTP port open. Check for local admin page with your browser.",
+        "ONVIF port may be open. Test with an ONVIF client and your credentials.",
+        "Do NOT attempt brute-force or default credentials."
+      ]
+    },
+    {
+      "IPAddress": "10.0.0.161",
+      "Hostname": null,
+      "MacAddress": "0e-fd-70-0d-40-4d",
+      "OpenPorts": [
+        8000
+      ],
+      "RtspLikely": false,
+      "HttpLikely": false,
+      "HttpsLikely": false,
+      "OnvifCandidate": true,
+      "RtspCandidates": null,
+      "SafeNextSteps": [
+        "Confirm this device belongs to your YI YHS.3017 via router DHCP table or YI app.",
+        "ONVIF port may be open. Test with an ONVIF client and your credentials.",
+        "Do NOT attempt brute-force or default credentials."
+      ]
+    },
+    {
+      "IPAddress": "10.0.0.167",
+      "Hostname": null,
+      "MacAddress": "3c-62-f0-d4-1d-58",
+      "OpenPorts": [
+        80,
+        443
+      ],
+      "RtspLikely": false,
+      "HttpLikely": true,
+      "HttpsLikely": true,
+      "OnvifCandidate": true,
+      "RtspCandidates": null,
+      "SafeNextSteps": [
+        "Confirm this device belongs to your YI YHS.3017 via router DHCP table or YI app.",
+        "HTTP port open. Check for local admin page with your browser.",
+        "ONVIF port may be open. Test with an ONVIF client and your credentials.",
+        "Do NOT attempt brute-force or default credentials."
+      ]
+    }
+  ],
+  "QRCodeFindings": {
+    "CameraHomewifiIP": "10.0.0.161",
+    "CameraMAC": "0e-fd-70-0d-40-4d",
+    "SSIDDecoded": "wolffwifi",
+    "PasswordEncoding": "XOR-obfuscated base64 - not stored",
+    "CloudBindingToken": "not stored - not required for local access",
+    "Port8000Status": "open - YI proprietary binary protocol (auth required for cloud mode)",
+    "RTSPStatus": "not exposed in stock firmware",
+    "LocalAccessOptions": [
+      "yi-hack custom firmware -> RTSP rtsp://10.0.0.161:554/ch0_0.264 + HTTP admin (no cloud, no token)",
+      "yi-hack: no cloud account or binding token required after flash"
+    ]
+  },
+  "QRCodeAnalysisUtc": "2026-08-08T20:07:35.0304047-07:00",
+  "CameraConfirmedIP": "10.0.0.161",
+  "CameraConfirmedMAC": "0e-fd-70-0d-40-4d",
+  "QRCodeDecoded": {
+    "SSID": "wolffwifi",
+    "CloudToken": "not stored - not required for local yi-hack access",
+    "Port8000": "open - YI proprietary protocol",
+    "RTSP": "not exposed in stock firmware; enabled by yi-hack"
+  }
+}

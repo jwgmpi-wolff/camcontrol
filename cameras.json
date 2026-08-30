@@ -1,0 +1,52 @@
+{
+  "TNPUSAI-035961-DTFMK": {
+    "device_id": "TNPUSAI-035961-DTFMK",
+    "name": "Camera",
+    "did": "9CUSY2MYIOTUYA190726",
+    "mac": "50:13:95:E4:A4:8A",
+    "ip": "10.0.0.248",
+    "ssid": "wolffwifi",
+    "online": true,
+    "password": "D4B6EC06203F17D4CE63A54E25A9B0F2",
+    "model": "7",
+    "kalay_did": "TNPUSAI-035961-DTFMK",
+    "kalay_license": "MFNBDP:",
+    "kalay_init": "MMFBJPLDIEEPKPHOOIFEPNEHHDCJFMGOHJENKLIHIJBKDABIPMIIAONIPBCLBOKOPIKPDKPFNJDPAIDKBE",
+    "last_source_url": "rtsp://localhost:8554/camera"
+  },
+  "TNPUSAI-027828-ZWBLH": {
+    "device_id": "TNPUSAI-027828-ZWBLH",
+    "name": "back door",
+    "did": "9CUSY5PI3OP66O190726",
+    "mac": "50:13:95:E4:FF:0B",
+    "ip": "10.0.0.252",
+    "ssid": "lobofwifi",
+    "online": true,
+    "password": "75AD4BE191C87A1D939741D275E23BEE",
+    "model": "7",
+    "kalay_did": "TNPUSAI-027828-ZWBLH",
+    "kalay_license": "ULGHQQ:",
+    "kalay_init": "MMFBJPLDIEEPKPHOOIFEPNEHHDCJFMGOHJENKLIHIJBKDABIPMIIAONIPBCLBOKOPIKPDKPFNJDPAIDKBE",
+    "last_source_url": "rtsp://localhost:8554/back_door"
+  },
+  "5VYFXBT3VAHJTMZC111A": {
+    "device_id": "5VYFXBT3VAHJTMZC111A",
+    "name": "Kitchen",
+    "did": "22USIEN9FEBXOS160108",
+    "mac": "b0:d5:9d:63:cc:9b",
+    "ip": "10.0.0.141",
+    "ssid": "lobofwifi",
+    "online": true,
+    "password": "867CED8517CDB81E8BD032C0E434FB38",
+    "model": "1",
+    "kalay_did": "TNPUSAD-064090-JEYND",
+    "kalay_license": "AQHHST:",
+    "kalay_init": "MMFBJPLDIEEKKKHPODFPPOEJHNCHFCGAHHEDKFIJIDBCDIBDPKIIAONIPBCLBOKOPIKMDKPMNADGACDMBC",
+    "last_source_url": "rtsp://localhost:8554/kitchen"
+  },
+  "phone_screen": {
+    "name": "Phone Screen (YI app)",
+    "last_source_url": "scrcpy://screen",
+    "device_id": "phone_screen"
+  }
+}

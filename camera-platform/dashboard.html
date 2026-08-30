@@ -1,0 +1,1032 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CamControl — Live Cameras</title>
+<meta name="theme-color" content="#1e293b">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="CamControl">
+<link rel="manifest" href="/static/manifest.json">
+<link rel="apple-touch-icon" href="/static/icon-192.png">
+<!-- Scripts served locally to avoid IT admin CDN blocks -->
+<script src="/static/qrcode.min.js"></script>
+<script src="/static/hls.min.js"></script>
+<script>if('serviceWorker' in navigator) navigator.serviceWorker.register('/static/sw.js');</script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:system-ui,-apple-system,sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh}
+  header{background:#1e293b;padding:16px 24px;display:flex;align-items:center;gap:12px;border-bottom:1px solid #334155}
+  header h1{font-size:1.25rem;font-weight:700;color:#60a5fa}
+  .badge{font-size:.7rem;padding:2px 8px;border-radius:99px;font-weight:600}
+  .online{background:#16a34a;color:#fff}
+  .offline{background:#dc2626;color:#fff}
+  .streaming{background:#7c3aed;color:#fff}
+  .recording{background:#dc2626;color:#fff;animation:blink 1s infinite}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.4}}
+  main{display:grid;grid-template-columns:1fr 320px;gap:0;height:calc(100vh - 57px)}
+  #live-panel{position:relative;background:#000;display:flex;align-items:center;justify-content:center;overflow:hidden}
+  #live-img{max-width:100%;max-height:100%;object-fit:contain}
+  #no-stream{text-align:center;color:#64748b;padding:40px}
+  #no-stream h2{font-size:1.1rem;margin-bottom:8px}
+  #fps-label{position:absolute;top:10px;left:10px;background:rgba(0,0,0,.6);color:#a3e635;font-size:.75rem;padding:2px 8px;border-radius:4px;font-family:monospace}
+  #rec-badge{position:absolute;top:10px;right:10px;background:#dc2626;color:#fff;padding:3px 10px;border-radius:4px;font-size:.75rem;font-weight:700;display:none;animation:blink 1s infinite}
+  aside{background:#1e293b;border-left:1px solid #334155;display:flex;flex-direction:column;overflow-y:auto}
+  .section{padding:16px;border-bottom:1px solid #334155}
+  .section h3{font-size:.75rem;text-transform:uppercase;letter-spacing:.08em;color:#94a3b8;margin-bottom:12px}
+  .status-row{display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:.85rem}
+  .status-val{color:#cbd5e1;font-family:monospace;font-size:.8rem}
+  .btn-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
+  button{border:none;border-radius:8px;padding:9px 14px;font-size:.85rem;font-weight:600;cursor:pointer;transition:opacity .15s}
+  button:hover{opacity:.85}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  .btn-primary{background:#3b82f6;color:#fff}
+  .btn-danger{background:#ef4444;color:#fff}
+  .btn-success{background:#22c55e;color:#0f172a}
+  .btn-neutral{background:#334155;color:#e2e8f0}
+  .btn-purple{background:#8b5cf6;color:#fff}
+  #toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1e40af;color:#fff;padding:10px 20px;border-radius:8px;font-size:.85rem;opacity:0;transition:opacity .3s;pointer-events:none;z-index:99}
+  .gateway-url{font-size:.75rem;color:#64748b;font-family:monospace;margin-top:6px}
+  #url-input{background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:6px 10px;border-radius:6px;width:100%;font-size:.8rem;font-family:monospace}
+  .device-info{font-size:.78rem;color:#94a3b8;line-height:1.7}
+  .discovery-table{width:100%;border-collapse:collapse;font-size:.75rem;margin-top:6px}
+  .discovery-table th{text-align:left;color:#64748b;padding:2px 4px;border-bottom:1px solid #334155}
+  .discovery-table td{padding:3px 4px;color:#cbd5e1;font-family:monospace}
+  .tag{display:inline-block;font-size:.65rem;padding:1px 5px;border-radius:3px;margin-left:4px}
+  .tag-on{background:#16a34a;color:#fff}
+  .tag-off{background:#334155;color:#94a3b8}
+  @media(max-width:700px){main{grid-template-columns:1fr;grid-template-rows:auto auto}}
+  /* Multi-camera grid */
+  #cam-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px;padding:8px;overflow-y:auto;background:#000;align-content:start}
+  .cam-tile{position:relative;background:#111;border-radius:6px;overflow:hidden;aspect-ratio:16/9;border:1px solid #1e293b}
+  .cam-tile.active{border-color:#22c55e}
+  .cam-tile.error{border-color:#ef4444}
+  .cam-tile video{width:100%;height:100%;object-fit:cover;display:block}
+  .cam-label{position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,.8));color:#fff;font-size:.7rem;font-weight:600;padding:16px 6px 4px;}
+  .cam-status{position:absolute;top:5px;right:5px;width:8px;height:8px;border-radius:50%;background:#334155}
+  .cam-status.live{background:#22c55e;box-shadow:0 0 6px #22c55e}
+  .cam-status.error{background:#ef4444}
+  .cam-status.loading{background:#f59e0b;animation:blink 1s infinite}
+  .cam-no-signal{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:#334155;font-size:.8rem;gap:8px}
+  .cam-no-signal svg{opacity:.4}
+  #grid-toolbar{background:#0f172a;border-bottom:1px solid #1e293b;padding:6px 12px;display:flex;align-items:center;gap:8px;font-size:.78rem}
+  .grid-btn{background:#1e293b;border:none;color:#94a3b8;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:.75rem}
+  .grid-btn:hover{background:#334155;color:#e2e8f0}
+  .grid-btn.active-btn{background:#22c55e;color:#0f172a;font-weight:700}
+</style>
+</head>
+<body>
+
+<header>
+  <span style="font-size:1.4rem">📷</span>
+  <h1>CamControl</h1>
+  <span id="gw-status" class="badge offline">Connecting…</span>
+  <span id="stream-badge" class="badge streaming" style="display:none">STREAM</span>
+  <span id="rec-status-badge" class="badge recording" style="display:none">● REC</span>
+</header>
+
+<main>
+  <!-- Multi-camera live grid -->
+  <div style="display:flex;flex-direction:column;overflow:hidden">
+    <div id="grid-toolbar">
+      <span style="color:#60a5fa;font-weight:700">📹 Live Feeds</span>
+      <button class="grid-btn" onclick="startAllStreams()" title="Start all cameras">▶ Start All</button>
+      <button class="grid-btn" onclick="stopAllStreams()" title="Stop all cameras">⏹ Stop All</button>
+      <button class="grid-btn" onclick="startPhoneScreen()" title="Stream phone screen (YI app open on phone)">📱 Phone Screen</button>
+      <button class="grid-btn" onclick="refreshGrid()" title="Refresh grid">↺ Refresh</button>
+      <span id="live-count" style="color:#64748b;margin-left:auto">0 live</span>
+    </div>
+    <div id="cam-grid">
+      <div class="cam-tile" id="cam-placeholder">
+        <div class="cam-no-signal">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M15 10l4.553-2.069A1 1 0 0121 8.82v6.36a1 1 0 01-1.447.89L15 14M3 8a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/></svg>
+          <span>Click Start All to begin streaming</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Controls sidebar -->
+  <aside>
+
+    <!-- Gateway -->
+    <div class="section">
+      <h3>Gateway</h3>
+      <input id="url-input" type="text" value="http://localhost:8080" placeholder="http://host:8080">
+      <div class="gateway-url">Change to reach a remote gateway</div>
+    </div>
+
+    <!-- Status -->
+    <div class="section">
+      <h3>Status</h3>
+      <div class="status-row"><span>Gateway</span><span id="st-gw" class="status-val">–</span></div>
+      <div class="status-row"><span>Streaming</span><span id="st-stream" class="status-val">–</span></div>
+      <div class="status-row"><span>Recording</span><span id="st-rec" class="status-val">–</span></div>
+      <div class="status-row"><span>Frame rate</span><span id="st-fps" class="status-val">–</span></div>
+    </div>
+
+    <!-- Stream controls -->
+    <div class="section">
+      <h3>Stream</h3>
+      <div class="btn-row">
+        <button class="btn-primary" onclick="api('POST','/api/stream/start')">▶ Start</button>
+        <button class="btn-neutral" onclick="api('POST','/api/stream/stop')">■ Stop</button>
+      </div>
+      <div class="btn-row" style="margin-top:8px">
+        <button class="btn-success" onclick="toggleLiveView()" id="lv-btn">👁 Live View ON</button>
+      </div>
+    </div>
+
+    <!-- Recording -->
+    <div class="section">
+      <h3>Recording</h3>
+      <div class="btn-row">
+        <button class="btn-danger" onclick="api('POST','/api/recording/start')">⏺ Record</button>
+        <button class="btn-neutral" onclick="api('POST','/api/recording/stop')">⏹ Stop</button>
+        <button class="btn-neutral" onclick="api('GET','/api/recordings').then(r=>showJson(r))">📂 List</button>
+      </div>
+    </div>
+
+    <!-- Snapshot -->
+    <div class="section">
+      <h3>Snapshot</h3>
+      <div class="btn-row">
+        <button class="btn-primary" onclick="snapshot()">📸 Capture</button>
+      </div>
+      <div id="snap-result" style="font-size:.75rem;color:#a3e635;margin-top:8px"></div>
+    </div>
+
+    <!-- Device info -->
+    <div class="section">
+      <h3>Camera</h3>
+      <button class="btn-neutral" style="width:100%;margin-bottom:8px" onclick="loadDevice()">🔍 Load Device Info</button>
+      <div id="device-info" class="device-info">–</div>
+    </div>
+
+    <!-- YI Cloud — Google auth -->
+    <div class="section" style="background:#0f172a;border:2px solid #7c3aed">
+      <h3 style="color:#c4b5fd">☁ YI Cloud Auth</h3>
+      <div id="cloud-status-bar" style="font-size:.72rem;margin-bottom:10px;padding:4px 8px;border-radius:4px;background:#1e293b;color:#94a3b8">
+        Not logged in
+      </div>
+
+      <!-- Step 1: capture token from YI app -->
+      <div style="background:#1e1b4b;border:1px solid #4338ca;border-radius:6px;padding:8px;margin-bottom:8px;font-size:.72rem">
+        <div style="color:#a5b4fc;font-weight:600;margin-bottom:4px">Step 1 — Capture Google token from YI app</div>
+        <div style="color:#94a3b8;line-height:1.5">
+          YI uses Google Sign-In with their own private OAuth client.
+          Capture the token from the running app:
+          <ol style="margin:4px 0 0 16px;padding:0;color:#94a3b8">
+            <li>Install <b style="color:#a5b4fc">HTTP Toolkit</b> on your Android phone (free, no root)</li>
+            <li>Open HTTP Toolkit → <b>Android (via ADB)</b> or <b>Manual setup</b></li>
+            <li>Open <b>YI Home app</b> → tap sign in with Google</li>
+            <li>In HTTP Toolkit, search requests for <code style="color:#a5b4fc">id_token</code></li>
+            <li>Copy the full <code style="color:#a5b4fc">id_token</code> value (starts with <code>eyJ</code>)</li>
+          </ol>
+          <div style="margin-top:6px;color:#64748b">
+            Alternative: use <b>PCAPdroid</b> or <b>mitmproxy</b> on the same WiFi to capture the token.
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 2: paste token -->
+      <div style="background:#1e1b4b;border:1px solid #4338ca;border-radius:6px;padding:8px;margin-bottom:8px;font-size:.72rem">
+        <div style="color:#a5b4fc;font-weight:600;margin-bottom:4px">Step 2 — Paste the id_token here</div>
+        <textarea id="google-token-input" rows="3" placeholder="eyJhbGciOiJSUzI1NiIs..." style="background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:5px 8px;border-radius:6px;width:100%;font-size:.68rem;font-family:monospace;resize:vertical;margin-bottom:4px"></textarea>
+        <button class="btn-purple" onclick="cloudLoginToken()" style="width:100%">🔑 Exchange Token → YI Session</button>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">
+        <button class="btn-neutral" onclick="cloudDevices()" id="cloud-devices-btn" disabled>📷 Get Cameras</button>
+        <button class="btn-neutral" onclick="importCameras()" id="import-cameras-btn" disabled>⬇ Import All</button>
+      </div>
+      <div id="cloud-devices-list" style="font-size:.75rem;font-family:monospace;display:none;margin-bottom:8px"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        <button class="btn-success" onclick="startAllStreams()" id="cloud-stream-btn" style="display:none">▶ Start All</button>
+        <button class="btn-neutral" onclick="stopAllStreams()" id="stop-stream-btn" style="display:none">⏹ Stop All</button>
+      </div>
+    </div>
+
+    <!-- WiFi QR Generator — show this QR to the camera lens to configure WiFi -->
+    <div class="section" style="background:#0f172a;border:2px solid #f59e0b">
+      <h3 style="color:#fbbf24">📷 Camera WiFi Setup QR</h3>
+      <div style="font-size:.72rem;color:#94a3b8;margin-bottom:8px">
+        Hold your <b style="color:#fbbf24">screen</b> up to the camera lens to connect it to WiFi.
+        Format: <code style="color:#fbbf24">b=&amp;s=base64(ssid)&amp;p=base64(pass)</code> (confirmed working).
+      </div>
+      <label style="font-size:.72rem;color:#94a3b8">WiFi Network (SSID)</label>
+      <input id="qr-ssid" type="text" value="wolffwifi" style="background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:5px 8px;border-radius:6px;width:100%;font-size:.82rem;margin:3px 0 6px">
+      <label style="font-size:.72rem;color:#94a3b8">WiFi Password</label>
+      <input id="qr-wifi-pass" type="password" placeholder="Your WiFi password" style="background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:5px 8px;border-radius:6px;width:100%;font-size:.82rem;margin:3px 0 4px">
+      <label style="font-size:.72rem;color:#64748b;margin-bottom:6px;display:block">Binding token (leave blank = WiFi-only, no cloud)</label>
+      <input id="qr-bind-token" type="text" placeholder="e.g. US5mBBkW4IYN2fol (from YI app capture)" style="background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:5px 8px;border-radius:6px;width:100%;font-size:.75rem;font-family:monospace;margin-bottom:8px">
+      <button class="btn-primary" onclick="generateWifiQR()" style="width:100%;margin-bottom:8px">🔲 Generate Camera WiFi QR</button>
+      <div id="wifi-qr-status" style="font-size:.7rem;color:#64748b;margin-bottom:4px;display:none"></div>
+      <div id="wifi-qr-box" style="display:none;text-align:center;background:#fff;padding:12px;border-radius:8px;margin-bottom:6px">
+        <div id="wifi-qr-canvas"></div>
+        <div style="font-size:.65rem;color:#374151;margin-top:6px;word-break:break-all" id="wifi-qr-caption"></div>
+      </div>
+      <div id="wifi-qr-tip" style="display:none;font-size:.72rem;color:#fbbf24;text-align:center">
+        ☝ Hold directly at camera lens · wait for beep/LED change
+      </div>
+    </div>
+
+    <!-- Dashboard URL QR for phones -->
+    <div class="section" style="background:#0f172a;border:1px solid #4a1d96;text-align:center">
+      <h3 style="color:#c4b5fd">📱 Open Dashboard on Phone</h3>
+      <div style="font-size:.72rem;color:#94a3b8;margin-bottom:8px">Scan to open the live camera dashboard on any device on your WiFi</div>
+      <div id="qr-img" style="display:inline-block;background:#fff;padding:10px;border-radius:8px;border:2px solid #4a1d96"></div>
+      <div style="font-size:.68rem;color:#64748b;margin-top:6px;font-family:monospace" id="qr-caption"></div>
+      <div style="margin-top:8px">
+        <button class="btn-purple" onclick="refreshQR()" style="font-size:.75rem;padding:5px 12px">↺ Refresh QR</button>
+      </div>
+    </div>
+
+    <!-- QR Registration -->
+    <div class="section" style="background:#0f172a;border:1px solid #365314">
+      <h3 style="color:#a3e635">📷 Register Camera via QR Code</h3>
+      <div style="font-size:.75rem;color:#94a3b8;margin-bottom:8px">
+        Paste the QR code text (format: <code style="color:#a3e635">b=…&amp;s=…&amp;p=…</code>) — no cloud token stored.
+      </div>
+      <input id="qr-input" type="text" placeholder="b=US…&s=d29s…&p=VFY…"
+        style="background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:6px 10px;border-radius:6px;width:100%;font-size:.78rem;font-family:monospace;margin-bottom:8px">
+      <div style="display:flex;gap:6px;margin-bottom:8px">
+        <input id="qr-ip-hint" type="text" placeholder="IP hint (optional, e.g. 10.0.0.161)"
+          style="background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:6px 8px;border-radius:6px;flex:1;font-size:.78rem;font-family:monospace">
+        <button class="btn-success" onclick="registerFromQR()" id="qr-reg-btn">🔗 Register</button>
+      </div>
+      <div id="qr-result" style="font-size:.75rem;font-family:monospace;color:#a3e635;display:none;padding:8px;background:#1a2e05;border-radius:6px;margin-bottom:8px"></div>
+      <button class="btn-primary" onclick="useQRCamera()" id="qr-use-btn" style="display:none;width:100%">✓ Use This Camera</button>
+    </div>
+
+    <!-- WiFi Camera Setup -->
+    <div class="section" style="background:#0f172a;border:1px solid #1e3a5f">
+      <h3 style="color:#60a5fa">📡 YI WiFi Camera Setup</h3>
+      <div style="font-size:.75rem;color:#94a3b8;margin-bottom:10px">
+        Find camera IP in your router DHCP table or YI app.
+        Enter credentials YOU configured on the device.
+      </div>
+      <label style="font-size:.75rem;color:#94a3b8">Camera IP</label>
+      <input id="cam-ip" type="text" placeholder="10.0.0.x" style="background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:6px 10px;border-radius:6px;width:100%;font-size:.85rem;font-family:monospace;margin:4px 0 8px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">
+        <div>
+          <label style="font-size:.75rem;color:#94a3b8">Username (optional)</label>
+          <input id="cam-user" type="text" placeholder="leave blank if none" style="background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:6px 8px;border-radius:6px;width:100%;font-size:.8rem">
+        </div>
+        <div>
+          <label style="font-size:.75rem;color:#94a3b8">Password (optional)</label>
+          <input id="cam-pass" type="password" placeholder="leave blank if none" style="background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:6px 8px;border-radius:6px;width:100%;font-size:.8rem">
+        </div>
+      </div>
+      <div style="font-size:.75rem;color:#94a3b8;margin-bottom:4px">RTSP path (try each):</div>
+      <div id="probe-results" style="font-size:.75rem;font-family:monospace;margin-bottom:8px"></div>
+      <div class="btn-row">
+        <button class="btn-primary" onclick="probeCamera()" id="probe-btn">🔍 Probe RTSP</button>
+        <button class="btn-purple" onclick="probeOnvif()" id="onvif-btn">📡 ONVIF</button>
+        <button class="btn-success" onclick="setActiveCamera()" id="set-cam-btn" disabled>✓ Use This URL</button>
+      </div>
+      <div id="active-rtsp" style="font-size:.72rem;color:#a3e635;margin-top:6px;font-family:monospace;word-break:break-all"></div>
+    </div>
+
+    <!-- Network Scan (last run) -->
+    <div class="section">
+      <h3>Network Scan (last run)</h3>
+      <div style="font-size:.75rem;color:#64748b;margin-bottom:6px">From detect-yhs3017.ps1 — 2026-08-08 · click a row to target it</div>
+      <table class="discovery-table">
+        <tr><th>IP</th><th>Ports</th><th>Signals</th><th></th></tr>
+        <tr style="cursor:pointer" onclick="targetIp('10.0.0.161')">
+          <td>10.0.0.161</td><td>8000</td>
+          <td><span class="tag tag-on">ONVIF?</span></td>
+          <td><button class="btn-primary" style="padding:2px 8px;font-size:.7rem" onclick="event.stopPropagation();targetAndProbe('10.0.0.161')">▶</button></td>
+        </tr>
+        <tr style="cursor:pointer" onclick="targetIp('10.0.0.221')">
+          <td>10.0.0.221</td><td>80</td>
+          <td><span class="tag tag-on">HTTP</span><span class="tag tag-on">ONVIF?</span></td>
+          <td><button class="btn-primary" style="padding:2px 8px;font-size:.7rem" onclick="event.stopPropagation();targetAndProbe('10.0.0.221')">▶</button></td>
+        </tr>
+        <tr style="cursor:pointer" onclick="targetIp('10.0.0.236')">
+          <td>10.0.0.236</td><td>80</td>
+          <td><span class="tag tag-on">HTTP</span></td>
+          <td><button class="btn-primary" style="padding:2px 8px;font-size:.7rem" onclick="event.stopPropagation();targetAndProbe('10.0.0.236')">▶</button></td>
+        </tr>
+        <tr style="cursor:pointer" onclick="targetIp('10.0.0.188')">
+          <td>10.0.0.188</td><td>80,443</td>
+          <td><span class="tag tag-on">HTTPS</span></td>
+          <td><button class="btn-primary" style="padding:2px 8px;font-size:.7rem" onclick="event.stopPropagation();targetAndProbe('10.0.0.188')">▶</button></td>
+        </tr>
+        <tr><td colspan="4" style="color:#f59e0b;padding-top:6px;font-size:.75rem">
+          ⚠ 10.0.0.161:8000 responds with connection-reset → YI proprietary protocol (not ONVIF/RTSP).<br>
+          Stock YHS.3017 does not expose a standard local stream. Check YI app for LAN Stream toggle,<br>
+          or use an ONVIF/RTSP-capable camera with this gateway.
+        </td></tr>
+      </table>
+    </div>
+
+  </aside>
+</main>
+
+<div id="toast"></div>
+
+<script>
+let liveActive = true;
+let frameTimer = null;
+let frameCount = 0;
+let fpsWindowStart = Date.now();
+let currentFps = 0;
+
+function gw() {
+  const el = document.getElementById('url-input');
+  // When served from gateway itself, use same origin
+  if (el && el.value && el.value !== 'http://localhost:8080') return el.value.replace(/\/+$/,'');
+  return window.location.origin.includes('localhost:8080') ? '' : (el ? el.value.replace(/\/+$/,'') : 'http://localhost:8080');
+}
+
+async function api(method, path, body) {
+  try {
+    const r = await fetch(gw()+path, {
+      method,
+      headers: body ? {'Content-Type':'application/json'} : {},
+      body: body ? JSON.stringify(body) : undefined
+    });
+    const data = await r.json();
+    toast(JSON.stringify(data).slice(0,120));
+    return data;
+  } catch(e) {
+    toast('❌ '+e.message, true);
+  }
+}
+
+async function pollHealth() {
+  try {
+    const r = await fetch(gw()+'/api/health', {signal: AbortSignal.timeout(2000)});
+    const d = await r.json();
+    document.getElementById('gw-status').textContent = '● Online';
+    document.getElementById('gw-status').className = 'badge online';
+    document.getElementById('st-gw').textContent = 'online';
+    document.getElementById('st-stream').textContent = d.streaming ? 'YES' : 'no';
+    document.getElementById('st-rec').textContent = d.recording ? 'YES' : 'no';
+    document.getElementById('stream-badge').style.display = d.streaming ? 'inline' : 'none';
+    document.getElementById('rec-status-badge').style.display = d.recording ? 'inline' : 'none';
+    document.getElementById('rec-badge').style.display = d.recording ? 'block' : 'none';
+  } catch {
+    document.getElementById('gw-status').textContent = '✗ Offline';
+    document.getElementById('gw-status').className = 'badge offline';
+    document.getElementById('st-gw').textContent = 'unreachable';
+  }
+}
+
+async function pollFrame() {
+  if (!liveActive) return;
+  try {
+    const res = await fetch(gw()+'/api/stream/frame', {signal: AbortSignal.timeout(2500)});
+    if (!res.ok) throw new Error(res.status);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const img = document.getElementById('live-img');
+    const old = img.src;
+    img.src = url;
+    img.style.display = 'block';
+    document.getElementById('no-stream').style.display = 'none';
+    document.getElementById('fps-label').style.display = 'block';
+    if (old && old.startsWith('blob:')) URL.revokeObjectURL(old);
+    frameCount++;
+    const now = Date.now();
+    if (now - fpsWindowStart >= 1000) {
+      currentFps = frameCount;
+      frameCount = 0;
+      fpsWindowStart = now;
+      document.getElementById('fps-label').textContent = currentFps+' fps';
+      document.getElementById('st-fps').textContent = currentFps+' fps';
+    }
+  } catch {
+    // silent — camera may not have a frame available yet
+  }
+  frameTimer = setTimeout(pollFrame, 120);
+}
+
+function toggleLiveView() {
+  liveActive = !liveActive;
+  const btn = document.getElementById('lv-btn');
+  if (liveActive) {
+    btn.textContent = '👁 Live View ON';
+    btn.className = 'btn-success';
+    pollFrame();
+  } else {
+    btn.textContent = '⏸ Live View OFF';
+    btn.className = 'btn-neutral';
+    if (frameTimer) clearTimeout(frameTimer);
+  }
+}
+
+async function snapshot() {
+  const d = await api('POST','/api/snapshot');
+  if (d && d.path) {
+    document.getElementById('snap-result').textContent = '✓ Saved: '+d.path;
+  }
+}
+
+async function loadDevice() {
+  const d = await api('GET','/api/device');
+  if (!d) return;
+  const el = document.getElementById('device-info');
+  el.innerHTML = `
+    <b>${d.name || '–'}</b><br>
+    IP: ${d.device_path || d.ip_address || '–'}<br>
+    ${d.reason ? '<span style="color:#f59e0b">'+d.reason+'</span>' : ''}
+    ${(d.usb_metadata && Object.keys(d.usb_metadata).length) ? '<br>'+Object.entries(d.usb_metadata).map(([k,v])=>k+': '+v).join('<br>') : ''}
+  `;
+}
+
+function showJson(data) {
+  if (!data) return;
+  const txt = JSON.stringify(data, null, 2);
+  alert(txt);
+}
+
+function toast(msg, err=false) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.style.background = err ? '#991b1b' : '#1e40af';
+  el.style.opacity = '1';
+  clearTimeout(toast._t);
+  toast._t = setTimeout(()=> el.style.opacity='0', 3500);
+}
+
+function targetIp(ip) {
+  document.getElementById('cam-ip').value = ip;
+  document.getElementById('cam-ip').focus();
+  document.getElementById('cam-ip').scrollIntoView({behavior:'smooth'});
+  toast('IP set to ' + ip + ' — add credentials if needed, then click Probe Camera');
+}
+
+// YI camera RTSP candidates — try port 554 then 8000 (some YI models use 8000)
+const YI_PATHS = [
+  {port:554, path:'/ch0_0.264'},
+  {port:554, path:'/ch0_1.264'},
+  {port:554, path:'/ch0_0.h264'},
+  {port:554, path:'/live'},
+  {port:554, path:'/stream1'},
+  {port:8000, path:'/ch0_0.264'},
+  {port:8000, path:'/ch0_0.h264'},
+  {port:8000, path:'/live'},
+];
+let confirmedRtspUrl = null;
+
+function targetIp(ip) {
+  document.getElementById('cam-ip').value = ip;
+  document.getElementById('cam-ip').scrollIntoView({behavior:'smooth'});
+  toast('IP set to ' + ip + ' — click Probe Camera');
+}
+
+function targetAndProbe(ip) {
+  document.getElementById('cam-ip').value = ip;
+  document.getElementById('cam-ip').scrollIntoView({behavior:'smooth'});
+  setTimeout(probeCamera, 200);
+}
+
+async function probeOnvif() {
+  const ip = document.getElementById('cam-ip').value.trim();
+  if (!ip) { toast('Enter camera IP first', true); return; }
+  const btn = document.getElementById('onvif-btn');
+  btn.disabled = true; btn.textContent = 'Probing…';
+  const el = document.getElementById('probe-results');
+  el.innerHTML = '<div style="color:#64748b">Sending ONVIF GetCapabilities to ' + ip + ':8000…</div>';
+  try {
+    const r = await fetch(`${gw()}/api/camera/onvif-probe?ip=${encodeURIComponent(ip)}&port=8000`,
+      {signal: AbortSignal.timeout(8000)});
+    const d = await r.json();
+    if (d.onvif) {
+      el.innerHTML = `<div style="color:#a3e635">✓ ONVIF device found at ${ip}:8000</div>`;
+      if (d.rtspPort) {
+        el.innerHTML += `<div style="color:#a3e635">RTSP port: ${d.rtspPort} — set URL manually in Setup</div>`;
+        const rtspUrl = `rtsp://${ip}:${d.rtspPort}/ch0_0.264`;
+        confirmedRtspUrl = rtspUrl;
+        document.getElementById('set-cam-btn').disabled = false;
+      }
+      el.innerHTML += `<div style="color:#64748b;font-size:.7rem;margin-top:4px">${(d.snippet||'').substring(0,300)}</div>`;
+    } else {
+      el.innerHTML = `<div style="color:#ef4444">✗ No ONVIF response: ${d.error}</div>`;
+    }
+  } catch(e) { el.innerHTML = `<div style="color:#ef4444">✗ ${e.message}</div>`; }
+  btn.disabled = false; btn.textContent = '📡 ONVIF';
+}
+
+// ── Multi-camera live grid ──────────────────────────────────────────────────
+
+const _hlsPlayers = {};  // device_id → Hls instance
+
+function _makeTile(cam) {
+  const did = cam.device_id;
+  const name = cam.name || did;
+  const tile = document.createElement('div');
+  tile.className = 'cam-tile';
+  tile.id = `tile-${did}`;
+  tile.innerHTML = `
+    <div class="cam-no-signal" id="nosig-${did}">
+      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M15 10l4.553-2.069A1 1 0 0121 8.82v6.36a1 1 0 01-1.447.89L15 14M3 8a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/></svg>
+      <span id="nosig-msg-${did}">Idle — click ▶ Start</span>
+    </div>
+    <video id="vid-${did}" style="display:none" muted playsinline autoplay></video>
+    <div class="cam-label">${name}<span style="font-size:.6rem;opacity:.6;margin-left:6px">${did.slice(0,14)}</span></div>
+    <div class="cam-status" id="dot-${did}"></div>`;
+  return tile;
+}
+
+async function refreshGrid() {
+  try {
+    const r = await fetch(gw() + '/api/cameras');
+    const { cameras } = await r.json();
+    const grid = document.getElementById('cam-grid');
+    const placeholder = document.getElementById('cam-placeholder');
+    if (cameras.length) placeholder.style.display = 'none';
+
+    cameras.forEach(cam => {
+      const did = cam.device_id;
+      if (!document.getElementById(`tile-${did}`)) {
+        grid.appendChild(_makeTile(cam));
+      }
+      // Update stream status
+      const alive = cam.stream && cam.stream.alive;
+      const hlsReady = cam.stream && cam.stream.hls_ready;
+      const tile = document.getElementById(`tile-${did}`);
+      const dot = document.getElementById(`dot-${did}`);
+      if (tile) tile.className = `cam-tile${alive ? ' active' : ''}`;
+      if (dot) dot.className = `cam-status ${alive ? 'live' : ''}`;
+      if (alive && hlsReady && !_hlsPlayers[did]) {
+        _attachHls(did, cam.stream.hls_url);
+      }
+    });
+    const liveCount = cameras.filter(c => c.stream && c.stream.alive).length;
+    document.getElementById('live-count').textContent = `${liveCount} live`;
+  } catch(e) { console.error('refreshGrid', e); }
+}
+
+function _attachHls(did, hlsUrl) {
+  const vid = document.getElementById(`vid-${did}`);
+  const nosig = document.getElementById(`nosig-${did}`);
+  if (!vid) return;
+  if (Hls.isSupported()) {
+    const hls = new Hls({ lowLatencyMode: true });
+    hls.loadSource(hlsUrl);
+    hls.attachMedia(vid);
+    hls.on(Hls.Events.MANIFEST_PARSED, () => { vid.play(); vid.style.display='block'; nosig.style.display='none'; });
+    hls.on(Hls.Events.ERROR, (_, d) => {
+      if (d.fatal) { document.getElementById(`dot-${did}`).className='cam-status error'; }
+    });
+    _hlsPlayers[did] = hls;
+  } else if (vid.canPlayType('application/vnd.apple.mpegurl')) {
+    vid.src = hlsUrl; vid.play(); vid.style.display='block'; nosig.style.display='none';
+  }
+}
+
+function _detachHls(did) {
+  const hls = _hlsPlayers[did];
+  if (hls) { hls.destroy(); delete _hlsPlayers[did]; }
+  const vid = document.getElementById(`vid-${did}`);
+  const nosig = document.getElementById(`nosig-${did}`);
+  if (vid) { vid.pause(); vid.src = ''; vid.style.display = 'none'; }
+  if (nosig) { nosig.style.display = 'flex'; document.getElementById(`nosig-msg-${did}`).textContent = 'Stopped'; }
+  const dot = document.getElementById(`dot-${did}`);
+  if (dot) dot.className = 'cam-status';
+  const tile = document.getElementById(`tile-${did}`);
+  if (tile) tile.className = 'cam-tile';
+}
+
+async function startOneStream(did) {
+  const dot = document.getElementById(`dot-${did}`);
+  const msg = document.getElementById(`nosig-msg-${did}`);
+  if (dot) dot.className = 'cam-status loading';
+  if (msg) msg.textContent = 'Starting…';
+  try {
+    const r = await fetch(gw() + '/api/stream/start', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({device_id: did})
+    });
+    const d = await r.json();
+    if (d.ok) {
+      toast(`Stream started: ${did.slice(0,14)}`);
+      // Poll until HLS ready
+      let tries = 0;
+      const poll = setInterval(async () => {
+        tries++;
+        const st = await (await fetch(gw() + '/api/stream/status')).json();
+        const info = st.active_streams && st.active_streams[did];
+        if (info && info.hls_ready) { clearInterval(poll); _attachHls(did, info.hls_url); }
+        if (tries > 15) { clearInterval(poll); if (msg) msg.textContent = 'HLS timeout'; }
+      }, 2000);
+    } else { if (msg) msg.textContent = d.error || 'Failed'; if (dot) dot.className='cam-status error'; toast('Start failed: ' + (d.error||'?'), true); }
+  } catch(e) { if (msg) msg.textContent = 'Error'; toast(e.message, true); }
+}
+
+async function stopOneStream(did) {
+  _detachHls(did);
+  await fetch(gw() + '/api/stream/stop', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({device_id: did}) });
+}
+
+async function startPhoneScreen() {
+  toast('Opening YI app on phone → navigate to camera live view then click again');
+  try {
+    const r = await fetch(gw() + '/api/stream/start-phone', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({device_id: 'phone_screen'})
+    });
+    const d = await r.json();
+    if (d.ok) {
+      toast(`Phone screen streaming: ${d.hls_url}`);
+      setTimeout(refreshGrid, 4000);
+    } else { toast('Failed: ' + (d.detail || d.error || '?'), true); }
+  } catch(e) { toast(e.message, true); }
+}
+
+// Grid toolbar wrappers
+async function startAllStreams() {
+  toast('Starting all streams…');
+  try {
+    const r = await fetch(gw() + '/api/stream/start-all', {method:'POST'});
+    const d = await r.json();
+    toast(`Started ${d.started} stream(s)`);
+    setTimeout(refreshGrid, 3000);
+    setTimeout(refreshGrid, 8000);
+  } catch(e) { toast(e.message, true); }
+}
+
+async function stopAllStreams() {
+  Object.keys(_hlsPlayers).forEach(did => _detachHls(did));
+  await fetch(gw() + '/api/stream/stop-all', {method:'POST'});
+  toast('All streams stopped');
+  setTimeout(refreshGrid, 1000);
+}
+
+// Auto-refresh grid every 5s
+setInterval(refreshGrid, 5000);
+
+let _qrRegistration = null;
+let _cloudDeviceId = null;
+
+async function cloudGoogleAuth() {
+  toast('Opening browser for Google sign-in...');
+  try {
+    const r = await fetch(gw() + '/api/cloud/google-auth-start', {method:'POST'});
+    const d = await r.json();
+    toast('Browser opened. Sign in with Google, then wait 5s.');
+    window.open(d.auth_url, '_blank');
+    // Poll status for up to 60s
+    for (let i = 0; i < 30; i++) {
+      await new Promise(res => setTimeout(res, 2000));
+      const s = await (await fetch(gw() + '/api/cloud/status')).json();
+      if (s.authenticated) { _onCloudLoggedIn(s.user_id); return; }
+    }
+    toast('Sign-in timed out. Paste the id_token manually.', true);
+  } catch(e) { toast('Error: ' + e.message, true); }
+}
+
+async function cloudLoginToken() {
+  const token = document.getElementById('google-token-input').value.trim();
+  if (!token) { toast('Paste a Google id_token first', true); return; }
+  try {
+    const r = await fetch(gw() + '/api/cloud/google-login', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({google_token: token})
+    });
+    if (r.ok) {
+      const d = await r.json();
+      _onCloudLoggedIn(d.user_id);
+      document.getElementById('google-token-input').value = '';
+    } else { const e = await r.json(); toast('Token exchange failed: ' + (e.detail||'?'), true); }
+  } catch(e) { toast('Error: ' + e.message, true); }
+}
+
+function _onCloudLoggedIn(userId) {
+  const bar = document.getElementById('cloud-status-bar');
+  bar.style.cssText += ';background:#14532d;color:#86efac';
+  bar.textContent = '✓ Logged in — user ' + (userId || '?');
+  document.getElementById('cloud-devices-btn').disabled = false;
+  document.getElementById('import-cameras-btn').disabled = false;
+  toast('Google auth OK — YI session active');
+}
+
+async function importCameras() {
+  const btn = document.getElementById('import-cameras-btn');
+  btn.disabled = true; btn.textContent = 'Importing...';
+  try {
+    const r = await fetch(gw() + '/api/cameras/import', {method:'POST'});
+    const d = await r.json();
+    toast('Imported ' + d.imported + ' camera(s) to registry');
+    await cloudDevices();
+    document.getElementById('cloud-stream-btn').style.display = '';
+    document.getElementById('stop-stream-btn').style.display = '';
+  } catch(e) { toast('Error: ' + e.message, true); }
+  btn.disabled = false; btn.textContent = '⬇ Import All';
+}
+
+async function startAllStreams() {
+  toast('Starting all camera streams...');
+  try {
+    const r = await fetch(gw() + '/api/stream/start-all', {method:'POST'});
+    const d = await r.json();
+    toast('Started ' + d.started + ' / ' + (d.results||[]).length + ' streams');
+  } catch(e) { toast('Error: ' + e.message, true); }
+}
+
+async function stopAllStreams() {
+  try {
+    const r = await fetch(gw() + '/api/stream/stop-all', {method:'POST'});
+    const d = await r.json();
+    toast('Stopped: ' + (d.stopped||[]).join(', '));
+  } catch(e) { toast('Error: ' + e.message, true); }
+}
+
+async function cloudDevices() {
+  const btn = document.getElementById('cloud-devices-btn');
+  btn.disabled = true; btn.textContent = 'Loading...';
+  try {
+    const r = await fetch(gw() + '/api/cameras');
+    const data = await r.json();
+    const list = document.getElementById('cloud-devices-list');
+    if (data.cameras && data.cameras.length > 0) {
+      list.innerHTML = data.cameras.map(d => {
+        const did = d.device_id || '?';
+        const name = d.name || 'Camera';
+        const alive = d.stream && d.stream.alive;
+        const hlsUrl = d.stream && d.stream.hls_url ? d.stream.hls_url : '';
+        return `<div style="padding:4px;border-radius:4px;margin:2px 0;background:#1e293b;border:1px solid #334155">
+          <b style="color:#c4b5fd">${name}</b>
+          <span style="float:right;font-size:.65rem;color:${alive?'#86efac':'#f87171'}">${alive?'● live':'○ idle'}</span>
+          <br><span style="color:#475569;font-size:.68rem">ID: ${did}</span>
+          ${hlsUrl ? `<br><a href="${hlsUrl}" target="_blank" style="font-size:.65rem;color:#7dd3fc">HLS link</a>` : ''}
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:4px">
+            <button class="btn-success" style="font-size:.65rem;padding:2px 4px" onclick="startOneStream('${did}')">▶ Start</button>
+            <button class="btn-neutral" style="font-size:.65rem;padding:2px 4px" onclick="stopOneStream('${did}')">⏹ Stop</button>
+          </div>
+        </div>`;
+      }).join('');
+      list.style.display = 'block';
+      document.getElementById('cloud-stream-btn').style.display = '';
+      document.getElementById('stop-stream-btn').style.display = '';
+      toast(data.count + ' camera(s) in registry');
+    } else {
+      list.innerHTML = '<div style="color:#94a3b8;font-size:.72rem">No cameras registered. Click Import All after login.</div>';
+      list.style.display = 'block';
+    }
+  } catch(e) { toast('Error: ' + e.message, true); }
+  btn.disabled = false; btn.textContent = '📷 Get Cameras';
+}
+
+async function startOneStream(did) {
+  try {
+    const r = await fetch(gw() + '/api/stream/start', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({device_id: did})
+    });
+    const d = await r.json();
+    if (d.ok) toast('Stream started: ' + (d.hls_url||did));
+    else toast('Failed: ' + (d.error||'?'), true);
+    await cloudDevices();
+  } catch(e) { toast('Error: ' + e.message, true); }
+}
+
+async function stopOneStream(did) {
+  try {
+    await fetch(gw() + '/api/stream/stop', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({device_id: did})
+    });
+    await cloudDevices();
+  } catch(e) { toast('Error: ' + e.message, true); }
+}
+
+function selectCloudDevice(did, name) {
+  _cloudDeviceId = did;
+  document.querySelectorAll('#cloud-devices-list div').forEach(d => {
+    d.style.borderColor = d.textContent.includes(did) ? '#7c3aed' : '#334155';
+  });
+  toast('Selected: ' + name);
+}
+
+async function cloudActivateStream() {
+  if (!_cloudDeviceId) { toast('Select a camera first', true); return; }
+  const btn = document.getElementById('cloud-stream-btn');
+  btn.disabled = true; btn.textContent = 'Getting stream...';
+  try {
+    const r = await fetch(gw() + '/api/cloud/stream?device_id=' + encodeURIComponent(_cloudDeviceId));
+    const data = await r.json();
+    if (data.url) {
+      toast('Stream: ' + data.url.substring(0,60));
+      document.getElementById('active-rtsp').textContent = data.url;
+    } else { toast('Response: ' + JSON.stringify(data).slice(0,200)); }
+  } catch(e) { toast('Error: ' + e.message, true); }
+  btn.disabled = false; btn.textContent = 'Start Cloud Stream';
+}
+
+async function generateWifiQR() {
+  const ssid = document.getElementById('qr-ssid').value.trim();
+  const pass = document.getElementById('qr-wifi-pass').value;
+  const manualToken = document.getElementById('qr-bind-token').value.trim();
+  if (!ssid || !pass) { toast('Enter SSID and password first', true); return; }
+
+  const statusEl = document.getElementById('wifi-qr-status');
+  statusEl.style.display = 'block';
+  statusEl.style.color = '#f59e0b';
+  statusEl.textContent = 'Getting fresh binding token from YI cloud…';
+
+  // Get live bindkey from server (/v2/qrcode/get_bindkey)
+  let bindkey = manualToken;
+  if (!bindkey) {
+    try {
+      const r = await fetch(gw() + '/api/camera/qr-bindkey');
+      if (r.ok) {
+        const d = await r.json();
+        bindkey = d.bindkey || '';
+        statusEl.textContent = bindkey ? `Bindkey: ${bindkey} — scanning…` : 'No bindkey (not logged in — using WiFi-only format)';
+      }
+    } catch { statusEl.textContent = 'Gateway offline — using WiFi-only format'; }
+  }
+
+  // YI camera QR format confirmed working 2026-08-08:
+  // b=<bindkey>&s=<btoa(ssid)>&p=<btoa(pass)>
+  const s = btoa(ssid);
+  const p = btoa(pass);
+  const parts = [];
+  if (bindkey) parts.push(`b=${bindkey}`);
+  parts.push(`s=${s}`, `p=${p}`);
+  const yiStr = parts.join('&');
+
+  const box = document.getElementById('wifi-qr-box');
+  const canvas = document.getElementById('wifi-qr-canvas');
+  canvas.innerHTML = '';
+  new QRCode(canvas, {
+    text: yiStr, width: 280, height: 280,
+    colorDark: '#000000', colorLight: '#ffffff',
+    correctLevel: QRCode.CorrectLevel.M
+  });
+  document.getElementById('wifi-qr-caption').textContent = yiStr;
+  box.style.display = 'block';
+  document.getElementById('wifi-qr-tip').style.display = 'block';
+  toast('QR ready — hold screen 5-10 cm from camera lens');
+
+  // Poll for camera scan confirmation
+  if (bindkey) {
+    statusEl.textContent = `⏳ Waiting for camera to scan… (bindkey: ${bindkey})`;
+    let polls = 0;
+    const interval = setInterval(async () => {
+      polls++;
+      try {
+        const r = await fetch(`${gw()}/api/camera/qr-check?bindkey=${encodeURIComponent(bindkey)}`);
+        const d = await r.json();
+        if (d.scanned) {
+          clearInterval(interval);
+          statusEl.style.color = '#22c55e';
+          statusEl.textContent = `✅ Camera scanned! UID: ${d.uid}`;
+          toast(`Camera registered: ${d.uid}`);
+          setTimeout(refreshGrid, 2000);
+        }
+      } catch {}
+      if (polls > 30) { clearInterval(interval); statusEl.textContent = 'Scan timeout — regenerate if needed'; }
+    }, 5000);
+  }
+}
+
+function refreshQR() {
+  // Show dashboard URL QR so any device on the same WiFi can scan and open the dashboard
+  const url = window.location.origin || 'http://localhost:8080';
+  const el = document.getElementById('qr-img');
+  el.innerHTML = '';
+  new QRCode(el, {
+    text: url, width: 180, height: 180,
+    colorDark: '#000000', colorLight: '#ffffff',
+    correctLevel: QRCode.CorrectLevel.M
+  });
+  document.getElementById('qr-caption').textContent = url;
+}
+
+// QR + cloud status auto-load on page ready
+window.addEventListener('DOMContentLoaded', () => {
+  setTimeout(refreshQR, 800);
+  setTimeout(async () => {
+    try {
+      const r = await fetch((document.getElementById('url-input')||{value:'http://localhost:8080'}).value.replace(/\/+$/,'') + '/api/cloud/status');
+      const s = await r.json();
+      if (s.authenticated) {
+        const bar = document.getElementById('cloud-status-bar');
+        if (bar) { bar.style.cssText += ';background:#14532d;color:#86efac'; bar.textContent = 'YI Cloud: logged in (user ' + s.user_id + ')'; }
+        const devBtn = document.getElementById('cloud-devices-btn');
+        if (devBtn) devBtn.disabled = false;
+      }
+    } catch {}
+  }, 1200);
+});
+
+async function registerFromQR() {
+  const qr = document.getElementById('qr-input').value.trim();
+  if (!qr) { toast('Paste the QR code text first', true); return; }
+  const ipHint = document.getElementById('qr-ip-hint').value.trim();
+  const btn = document.getElementById('qr-reg-btn');
+  btn.disabled = true; btn.textContent = '⏳ Scanning…';
+  const resultEl = document.getElementById('qr-result');
+  resultEl.style.display = 'none';
+  try {
+    const body = { qr };
+    if (ipHint) body.ip = ipHint;
+    const r = await fetch(gw() + '/api/camera/register-qr', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await r.json();
+    _qrRegistration = data;
+    let html = `<b>SSID:</b> ${data.ssid || '—'}<br>`;
+    if (data.cameraIp) {
+      html += `<b>Camera IP:</b> ${data.cameraIp}:${data.port}<br>`;
+      html += `<b>RTSP candidates:</b><br>` + (data.rtspCandidates || []).map(u => `&nbsp;• ${u}`).join('<br>');
+      if (data.rtspApplied) html += `<br><span style="color:#86efac">✓ Applied: ${data.rtspApplied}</span>`;
+      document.getElementById('qr-use-btn').style.display = 'block';
+    } else {
+      html += `<span style="color:#f87171">${data.note}</span>`;
+    }
+    resultEl.innerHTML = html;
+    resultEl.style.display = 'block';
+    toast(data.note || 'QR parsed');
+  } catch(e) {
+    toast('❌ ' + e.message, true);
+  }
+  btn.disabled = false; btn.textContent = '🔗 Register';
+}
+
+function useQRCamera() {
+  if (!_qrRegistration || !_qrRegistration.rtspCandidates) return;
+  const url = _qrRegistration.rtspApplied || _qrRegistration.rtspCandidates[0];
+  document.getElementById('cam-ip').value = _qrRegistration.cameraIp || '';
+  api('PUT', '/api/camera/rtsp-url', { url }).then(() => {
+    document.getElementById('active-rtsp').textContent = '▶ ' + url;
+    toast('Camera registered: ' + url);
+    document.getElementById('set-cam-btn').disabled = false;
+  });
+}
+
+async function probeCamera() {
+  const ip = document.getElementById('cam-ip').value.trim();
+  if (!ip) { toast('Enter camera IP first', true); return; }
+  const user = document.getElementById('cam-user').value.trim();
+  const pass = document.getElementById('cam-pass').value.trim();
+  const btn = document.getElementById('probe-btn');
+  btn.disabled = true;
+  btn.textContent = 'Probing…';
+  const el = document.getElementById('probe-results');
+  el.innerHTML = '';
+  confirmedRtspUrl = null;
+  document.getElementById('set-cam-btn').disabled = true;
+
+  for (const c of YI_PATHS) {
+    const auth = (user && pass) ? `${encodeURIComponent(user)}:${encodeURIComponent(pass)}@` : '';
+    const url = `rtsp://${auth}${ip}:${c.port}${c.path}`;
+    const safeUrl = `rtsp://${user ? user+':**@' : ''}${ip}:${c.port}${c.path}`;
+    el.innerHTML += `<div style="color:#64748b">Testing ${safeUrl}…</div>`;
+    try {
+      const r = await fetch(`${gw()}/api/camera/rtsp-probe?ip=${encodeURIComponent(ip)}&port=${c.port}&path=${encodeURIComponent(c.path)}`, {signal: AbortSignal.timeout(9000)});
+      const d = await r.json();
+      if (d.reachable) {
+        el.innerHTML += `<div style="color:#a3e635">\u2713 REACHABLE: ${safeUrl}</div>`;
+        confirmedRtspUrl = url;
+        document.getElementById('set-cam-btn').disabled = false;
+        break;
+      } else {
+        el.innerHTML += `<div style="color:#ef4444">\u2717 ${safeUrl}</div>`;
+      }
+    } catch { el.innerHTML += `<div style="color:#ef4444">\u2717 ${safeUrl} (no response)</div>`; }
+  }
+
+  if (!confirmedRtspUrl) {
+    el.innerHTML += `<div style="color:#f59e0b;margin-top:6px;line-height:1.6">
+      <b>No stream found on this IP.</b><br>
+      The YI YHS.3017 stock firmware uses a proprietary protocol.<br>
+      <b>Try in the YI app:</b> Camera Settings → Local Stream / LAN Stream → Enable<br>
+      If no such toggle exists, the camera does not expose a standard local stream.</div>`;
+  }
+  btn.disabled = false;
+  btn.textContent = '\ud83d\udd0d Probe RTSP';
+}
+
+async function setActiveCamera() {
+  if (!confirmedRtspUrl) return;
+  const r = await fetch(`${gw()}/api/camera/rtsp-url`, {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({url: confirmedRtspUrl})
+  });
+  const d = await r.json();
+  document.getElementById('active-rtsp').textContent = 'Active: ' + (d.rtspUrl || confirmedRtspUrl).replace(/:([^@]+)@/, ':***@');
+  toast('Camera URL applied \u2014 Live View will now poll from this stream');
+  confirmedRtspUrl = null;
+  document.getElementById('set-cam-btn').disabled = true;
+}
+
+// Boot
+setInterval(pollHealth, 3000);
+pollHealth();
+pollFrame();
+refreshGrid();
+</script>
+</body>
+</html>

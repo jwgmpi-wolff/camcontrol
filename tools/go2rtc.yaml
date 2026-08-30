@@ -1,0 +1,19 @@
+api:
+  listen: ":1984"
+
+rtsp:
+  listen: ":8554"
+
+streams:
+  # Kalay P2P removed — triggers Windows Defender (Yandexcloud relay blocked by IT admin)
+  # Using direct local RTSP only. Cameras must be on same LAN.
+  camera:
+    - "rtsp://10.0.0.248/ch0_0.h264"
+    - "rtsp://admin:D4B6EC06203F17D4CE63A54E25A9B0F2@10.0.0.248/ch0_0.h264"
+    - "rtsp://10.0.0.248/ch0_1.h264"
+  back_door:
+    - "rtsp://10.0.0.252/ch0_0.h264"
+    - "rtsp://admin:75AD4BE191C87A1D939741D275E23BEE@10.0.0.252/ch0_0.h264"
+  kitchen:
+    - "rtsp://10.0.0.141/ch0_0.h264"
+    - "rtsp://admin:867CED8517CDB81E8BD032C0E434FB38@10.0.0.141/ch0_0.h264"

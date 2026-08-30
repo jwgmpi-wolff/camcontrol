@@ -1,0 +1,35 @@
+version: "3.9"
+services:
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.gateway
+    ports:
+      - "5000:5000"
+    environment:
+      - IOTHUB_DEVICE_CONNECTION_STRING=${IOTHUB_DEVICE_CONNECTION_STRING}
+      - AZURE_STORAGE_CONNECTION_STRING=${AZURE_STORAGE_CONNECTION_STRING}
+      - AZURE_BLOB_CONTAINER=${AZURE_BLOB_CONTAINER:-camera-recordings}
+      - RTSP_URL=${RTSP_URL}
+      - API_KEY=${API_KEY}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+
+  bridge:
+    build:
+      context: .
+      dockerfile: Dockerfile.bridge
+    environment:
+      - IOTHUB_DEVICE_CONNECTION_STRING=${IOTHUB_DEVICE_CONNECTION_STRING}
+      - RTSP_URL=${RTSP_URL}
+      - SNAPSHOT_DIR=/data/snapshots
+      - RECORDING_DIR=/data/recordings
+      - TELEMETRY_INTERVAL_SECONDS=${TELEMETRY_INTERVAL_SECONDS:-30}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
+    depends_on:
+      - gateway
