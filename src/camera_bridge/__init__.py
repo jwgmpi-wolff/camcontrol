@@ -1,1 +1,3 @@
-"""Owner-authorized USB camera to Azure IoT edge bridge."""
+"""Self-hosted multi-camera gateway package."""
+
+__version__ = "0.1.0"

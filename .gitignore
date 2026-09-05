@@ -9,3 +9,24 @@ build/
 data/snapshots/
 .pytest_cache/
 .mypy_cache/
+
+# Scratch/working directories -- never committed
+build_tmp/
+
+# Camera configs can accumulate real secrets (SSH passwords, storage keys)
+# as the app is used -- keep the live config out of git.
+config/cameras.json
+
+# This camera's root password is a real, live secret once filled in --
+# never commit it. The WiFi PSK in wpa_supplicant.conf in the same folder
+# is a one-way-derived hex key and is safe to commit.
+camera-platform/flash-staging-yhs113/sdcard/test/yi-hack.cfg
+
+# Flutter/Dart tooling artifacts
+ui/.dart_tool/
+ui/.flutter-plugins-dependencies
+ui/.idea/
+ui/*.iml
+
+# Machine-specific local SDK paths -- never portable, never committed
+ui/android/local.properties

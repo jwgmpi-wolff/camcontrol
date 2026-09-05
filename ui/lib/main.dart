@@ -1,13 +1,11 @@
-import 'dart:async';
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'models/camera.dart';
 import 'services/api_service.dart';
-import 'screens/home_screen.dart';
-import 'screens/stream_screen.dart';
+import 'screens/multiview_screen.dart';
+import 'screens/media_browser_screen.dart';
 import 'screens/settings_screen.dart';
 
 void main() async {
@@ -15,7 +13,7 @@ void main() async {
   final prefs = await SharedPreferences.getInstance();
   runApp(
     ChangeNotifierProvider(
-      create: (_) => AppState(prefs),
+      create: (_) => AppState(prefs)..refreshCameras(),
       child: const CamControlApp(),
     ),
   );
@@ -28,19 +26,16 @@ class AppState extends ChangeNotifier {
   }
 
   final SharedPreferences _prefs;
-  String _baseUrl;
-  String _apiKey;
+  String _baseUrl = 'http://192.168.1.x:8080';
+  String _apiKey = '';
 
   String get baseUrl => _baseUrl;
   String get apiKey => _apiKey;
 
   late final ApiService api = ApiService(() => _baseUrl, () => _apiKey);
 
-  bool streaming = false;
-  bool recording = false;
-  Map<String, dynamic> device = {};
   String status = 'disconnected';
-  Uint8List? lastFrame;
+  List<Camera> cameras = [];
 
   Future<void> saveSettings(String url, String key) async {
     _baseUrl = url;
@@ -48,23 +43,18 @@ class AppState extends ChangeNotifier {
     await _prefs.setString('baseUrl', url);
     await _prefs.setString('apiKey', key);
     notifyListeners();
+    await refreshCameras();
   }
 
-  Future<void> refresh() async {
+  Future<void> refreshCameras() async {
     try {
-      final h = await api.health();
-      streaming = h['streaming'] as bool? ?? false;
-      recording = h['recording'] as bool? ?? false;
-      status = h['status'] as String? ?? 'ok';
-      notifyListeners();
+      await api.health();
+      cameras = await api.listCameras();
+      status = 'ok';
     } catch (_) {
       status = 'unreachable';
-      notifyListeners();
+      cameras = [];
     }
-  }
-
-  Future<void> fetchDevice() async {
-    device = await api.deviceInfo();
     notifyListeners();
   }
 }
@@ -98,9 +88,13 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   int _index = 0;
 
-  static const _screens = [HomeScreen(), StreamScreen(), SettingsScreen()];
-  static const _labels = ['Dashboard', 'Live View', 'Settings'];
-  static const _icons = [Icons.dashboard, Icons.videocam, Icons.settings];
+  static const _screens = [
+    MultiViewScreen(),
+    MediaBrowserScreen(),
+    SettingsScreen(),
+  ];
+  static const _labels = ['Cameras', 'Media', 'Settings'];
+  static const _icons = [Icons.grid_view, Icons.video_library, Icons.settings];
 
   @override
   Widget build(BuildContext context) {

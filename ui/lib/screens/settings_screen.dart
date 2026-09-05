@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../main.dart';
+import 'camera_edit_screen.dart';
+import 'discovery_screen.dart';
+import 'storage_settings_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -43,6 +46,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final state = context.watch<AppState>();
+
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: ListView(
@@ -94,42 +99,70 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 32),
           const Divider(),
           const SizedBox(height: 12),
-          Text('Camera', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 8),
-          const _InfoRow('Model', 'YI Outdoor Camera 1080p (YHS.3017)'),
-          const _InfoRow('FCC ID', '2AFIB-YHS3017'),
-          const _InfoRow('Manufacturer', 'Shanghai Xiaoyi Technology Co.,Ltd.'),
-          const _InfoRow('Connection', 'WiFi / RTSP (local network)'),
-          const _InfoRow('RTSP path hint', '/ch0_0.264  (port 554)'),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Cameras', style: Theme.of(context).textTheme.titleMedium),
+              Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.wifi_find),
+                    tooltip: 'Discover cameras on network',
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const DiscoveryScreen()),
+                    ).then((_) => state.refreshCameras()),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.add),
+                    tooltip: 'Add camera',
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const CameraEditScreen()),
+                    ).then((_) => state.refreshCameras()),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          if (state.cameras.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Text('No cameras configured yet.'),
+            ),
+          for (final camera in state.cameras)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.videocam),
+              title: Text(camera.name),
+              subtitle: Text(camera.type),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => CameraEditScreen(existing: camera),
+                ),
+              ).then((_) => state.refreshCameras()),
+            ),
+          const SizedBox(height: 32),
+          const Divider(),
           const SizedBox(height: 12),
+          Text('Storage', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
           const Text(
-            'Set CAMERA_RTSP_URL=rtsp://<camera-ip>/ch0_0.264 in the gateway '
-            '.env file. The gateway forwards the feed; no firmware changes are made.',
+            'Where captured images and videos are uploaded. Self-hosted '
+            'options only — no YI or other commercial cloud service.',
             style: TextStyle(fontSize: 12),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _InfoRow extends StatelessWidget {
-  const _InfoRow(this.label, this.value);
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 140,
-            child: Text(label,
-                style: const TextStyle(fontWeight: FontWeight.w500)),
+          const SizedBox(height: 12),
+          FilledButton.tonalIcon(
+            icon: const Icon(Icons.cloud),
+            label: const Text('Configure storage provider'),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const StorageSettingsScreen()),
+            ),
           ),
-          Expanded(child: Text(value)),
         ],
       ),
     );

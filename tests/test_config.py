@@ -1,58 +1,49 @@
-from __future__ import annotations
+from pathlib import Path
 
-import pytest
-
-from camera_bridge.config import Settings
-
-
-ENV_KEYS = (
-    "IOTHUB_DEVICE_CONNECTION_STRING",
-    "CAMERA_DEVICE_PATH",
-    "STREAM_ENABLED",
-    "STREAM_PROTOCOL",
-    "STREAM_PORT",
-    "STREAM_USERNAME",
-    "STREAM_PASSWORD",
-    "SNAPSHOT_INTERVAL_SECONDS",
-    "SNAPSHOT_DIRECTORY",
-    "LOG_LEVEL",
+from camera_bridge.config import load_config, save_config
+from camera_bridge.models import (
+    AppConfig,
+    AzureBlobStorageConfig,
+    LocalStorageConfig,
+    YiHackV3SshCameraConfig,
 )
 
 
-@pytest.fixture(autouse=True)
-def clean_environment(monkeypatch: pytest.MonkeyPatch) -> None:
-    for key in ENV_KEYS:
-        monkeypatch.delenv(key, raising=False)
+def test_load_config_missing_file_returns_defaults(tmp_path: Path):
+    config = load_config(tmp_path / "does_not_exist.json")
+
+    assert config.cameras == []
+    assert isinstance(config.storage, LocalStorageConfig)
 
 
-def test_defaults_disable_streaming() -> None:
-    settings = Settings.from_env()
+def test_save_and_load_config_roundtrip(tmp_path: Path):
+    path = tmp_path / "cameras.json"
+    original = AppConfig(
+        cameras=[
+            YiHackV3SshCameraConfig(
+                id="cam-1", name="Front Yard", host="10.0.0.246", password=""
+            )
+        ],
+        storage=LocalStorageConfig(path="./captures"),
+    )
 
-    assert settings.stream_enabled is False
-    assert settings.stream_protocol == "rtsp"
-    assert settings.stream_port == 8554
+    save_config(original, path)
+    loaded = load_config(path)
 
-
-def test_enabled_rtsp_requires_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("STREAM_ENABLED", "true")
-
-    with pytest.raises(ValueError, match="requires username and password"):
-        Settings.from_env()
-
-
-def test_rejects_invalid_port(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("STREAM_PORT", "70000")
-
-    with pytest.raises(ValueError, match="at most 65535"):
-        Settings.from_env()
+    assert loaded == original
 
 
-def test_accepts_authenticated_rtsp(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("STREAM_ENABLED", "true")
-    monkeypatch.setenv("STREAM_USERNAME", "viewer")
-    monkeypatch.setenv("STREAM_PASSWORD", "not-a-real-secret")
+def test_save_and_load_config_roundtrip_azure_blob(tmp_path: Path):
+    path = tmp_path / "cameras.json"
+    original = AppConfig(
+        storage=AzureBlobStorageConfig(
+            container="camcontrol",
+            connection_string="UseDevelopmentStorage=true",
+        )
+    )
 
-    settings = Settings.from_env()
+    save_config(original, path)
+    loaded = load_config(path)
 
-    assert settings.stream_enabled is True
-    assert settings.stream_username == "viewer"
+    assert loaded == original
+    assert loaded.storage.provider == "azure_blob"
