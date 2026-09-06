@@ -68,6 +68,12 @@ class _CameraTileState extends State<CameraTile> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed && _timer == null) _startPolling();
   }
 
+  // Some camera types (the SSH mmap-scrape fallback) don't have a documented,
+  // reliable live-view mechanism at all -- treat "no frame available yet" as
+  // an expected soft state, not a connectivity failure.
+  bool get _isLiveViewUnavailable =>
+      _error?.contains('No JPEG frame found') ?? false;
+
   @override
   Widget build(BuildContext context) {
     return Card(
@@ -89,7 +95,9 @@ class _CameraTileState extends State<CameraTile> with WidgetsBindingObserver {
                 Icon(
                   _error == null ? Icons.circle : Icons.error,
                   size: 10,
-                  color: _error == null ? Colors.green : Colors.red,
+                  color: _error == null
+                      ? Colors.green
+                      : (_isLiveViewUnavailable ? Colors.grey : Colors.red),
                 ),
               ],
             ),
@@ -106,6 +114,25 @@ class _CameraTileState extends State<CameraTile> with WidgetsBindingObserver {
           width: 24,
           height: 24,
           child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      );
+    }
+    if (_frame == null && _isLiveViewUnavailable) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.videocam_off, size: 28, color: Colors.grey.shade500),
+              const SizedBox(height: 6),
+              Text(
+                'Live view unavailable\nSee Media tab for recordings',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 11, color: Colors.grey.shade400),
+              ),
+            ],
+          ),
         ),
       );
     }

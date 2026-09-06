@@ -7,7 +7,7 @@ class Camera {
 
   final String id;
   final String name;
-  final String type; // "yi_hack_v3_ssh" | "rtsp"
+  final String type; // "hi3518e_ssh" | "rtsp"
 
   factory Camera.fromJson(Map<String, dynamic> json) => Camera(
         id: json['id'] as String,
@@ -16,9 +16,11 @@ class Camera {
       );
 
   /// Cameras without RTSP need a slower poll interval: the fallback
-  /// mmap-scrape mechanism is a best-effort snapshot, not a live feed.
+  /// mmap-scrape mechanism is a best-effort snapshot, not a live feed, and
+  /// a single fetch can itself take several seconds over the camera's slow
+  /// embedded SSH implementation.
   Duration get recommendedPollInterval =>
-      type == 'rtsp' ? const Duration(seconds: 1) : const Duration(seconds: 4);
+      type == 'rtsp' ? const Duration(seconds: 1) : const Duration(seconds: 15);
 }
 
 class DiscoveredCamera {

@@ -73,10 +73,12 @@ class ApiService {
   }
 
   /// Raw JPEG bytes for one live-view poll of [cameraId].
+  /// Some backends (e.g. the SSH mmap-scrape fallback) may need several
+  /// slow retries server-side, so this allows a generous ceiling.
   Future<Uint8List> fetchSnapshot(String cameraId) async {
     final res = await http
         .get(_uri('/api/cameras/$cameraId/snapshot'), headers: _headers)
-        .timeout(const Duration(seconds: 30));
+        .timeout(const Duration(seconds: 60));
     _check(res);
     return res.bodyBytes;
   }
