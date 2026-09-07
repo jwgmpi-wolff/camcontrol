@@ -7,10 +7,25 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
-class YiHackV3SshCameraConfig(BaseModel):
-    """Connection details for a yi-hack-v3 (Hi3518e) camera reachable over SSH."""
+class MotionConfig(BaseModel):
+    """Gateway-side motion detection: polls snapshots and diffs consecutive
+    frames itself, independent of any motion detection built into the
+    camera's own firmware. Off by default (opt-in per camera)."""
 
-    type: Literal["yi_hack_v3_ssh"] = "yi_hack_v3_ssh"
+    enabled: bool = False
+    # Mean per-pixel grayscale difference (0-255) across a downsampled
+    # frame required to count as motion. Lower = more sensitive.
+    threshold: float = 12.0
+    poll_interval_seconds: float = 2.0
+    record_seconds: float = 10.0
+    cooldown_seconds: float = 15.0
+
+
+class Hi3518eSshCameraConfig(BaseModel):
+    """Connection details for a Hi3518e-family camera running third-party
+    custom firmware, reachable over SSH."""
+
+    type: Literal["hi3518e_ssh"] = "hi3518e_ssh"
     id: str
     name: str
     host: str
@@ -19,6 +34,7 @@ class YiHackV3SshCameraConfig(BaseModel):
     password: str = ""
     remote_view_path: str = "/tmp/view"
     remote_media_dir: str = "/tmp/sd"
+    motion: MotionConfig = Field(default_factory=MotionConfig)
 
 
 class RtspCameraConfig(BaseModel):
@@ -28,9 +44,10 @@ class RtspCameraConfig(BaseModel):
     id: str
     name: str
     rtsp_url: str
+    motion: MotionConfig = Field(default_factory=MotionConfig)
 
 
-CameraConfig = YiHackV3SshCameraConfig | RtspCameraConfig
+CameraConfig = Hi3518eSshCameraConfig | RtspCameraConfig
 
 
 class LocalStorageConfig(BaseModel):

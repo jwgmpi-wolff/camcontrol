@@ -16,6 +16,7 @@ from .capture.registry import build_capture_backend
 from .config import DEFAULT_CONFIG_PATH, load_config, save_config
 from .discovery import DiscoveredCamera, scan_network
 from .models import AppConfig, CameraConfig, StorageConfig
+from .motion import MotionWatcher
 from .storage.base import StorageBackend, StorageError
 from .storage.registry import build_storage_backend
 
@@ -28,6 +29,7 @@ class _GatewayState:
         self.config: AppConfig = load_config(self.config_path)
         self._capture_backends: dict[str, CaptureBackend] = {}
         self._storage_backend: StorageBackend | None = None
+        self._motion_watchers: dict[str, MotionWatcher] = {}
 
     def capture_backend_for(self, camera_id: str) -> CaptureBackend:
         backend = self._capture_backends.get(camera_id)
@@ -45,14 +47,44 @@ class _GatewayState:
             self._storage_backend = build_storage_backend(self.config.storage)
         return self._storage_backend
 
+    def start_motion_watchers(self) -> None:
+        for camera in self.config.cameras:
+            if not camera.motion.enabled:
+                continue
+            watcher = MotionWatcher(
+                camera_id=camera.id,
+                config=camera.motion,
+                backend=self.capture_backend_for(camera.id),
+                storage=self.storage_backend(),
+            )
+            watcher.start()
+            self._motion_watchers[camera.id] = watcher
+
+    def stop_motion_watchers(self) -> None:
+        for watcher in self._motion_watchers.values():
+            watcher.stop()
+        self._motion_watchers.clear()
+
     def reload(self, config: AppConfig) -> None:
+        self.stop_motion_watchers()
         self.config = config
         self._capture_backends.clear()
         self._storage_backend = None
         save_config(config, self.config_path)
+        self.start_motion_watchers()
 
 
 state = _GatewayState()
+
+
+@app.on_event("startup")
+def _start_motion_watchers() -> None:
+    state.start_motion_watchers()
+
+
+@app.on_event("shutdown")
+def _stop_motion_watchers() -> None:
+    state.stop_motion_watchers()
 
 
 def _require_api_key(x_api_key: str | None = Header(default=None)) -> None:
@@ -73,6 +105,14 @@ class CaptureResult(BaseModel):
     timestamp: str
 
 
+class MotionStatus(BaseModel):
+    camera_id: str
+    enabled: bool
+    threshold: float
+    last_score: float
+    motion_active: bool
+
+
 @app.get("/api/health")
 def health() -> dict:
     return {"status": "ok", "cameras": len(state.config.cameras)}
@@ -83,6 +123,21 @@ def list_cameras(_: None = Depends(_require_api_key)) -> list[CameraSummary]:
     return [
         CameraSummary(id=c.id, name=c.name, type=c.type) for c in state.config.cameras
     ]
+
+
+@app.get("/api/cameras/{camera_id}/motion", response_model=MotionStatus)
+def get_motion_status(camera_id: str, _: None = Depends(_require_api_key)) -> MotionStatus:
+    for camera in state.config.cameras:
+        if camera.id == camera_id:
+            watcher = state._motion_watchers.get(camera_id)
+            return MotionStatus(
+                camera_id=camera_id,
+                enabled=camera.motion.enabled,
+                threshold=camera.motion.threshold,
+                last_score=watcher.last_score if watcher else 0.0,
+                motion_active=watcher.motion_active if watcher else False,
+            )
+    raise HTTPException(status_code=404, detail=f"Unknown camera id: {camera_id}")
 
 
 @app.get("/api/discover", response_model=list[DiscoveredCamera])

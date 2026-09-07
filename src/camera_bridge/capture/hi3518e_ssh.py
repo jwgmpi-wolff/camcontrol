@@ -119,11 +119,13 @@ class Hi3518eSshCapture(CaptureBackend, MediaBrowser):
     def list_media(self) -> list[MediaFile]:
         remote_dir = self._config.remote_media_dir
         # size<TAB>mtime_epoch<TAB>relative_path, one per line. Busybox-only
-        # (no GNU find -printf, no stat), so this shells out per file.
+        # (no GNU find -printf, no stat, and this firmware's busybox build
+        # doesn't even have `wc` or `stat`), so this shells out per file
+        # using `ls -l` + awk, which are both available.
         cmd = (
             f"cd {shlex.quote(remote_dir)} && "
             "find . -type f 2>/dev/null | while read -r f; do "
-            'printf "%s\\t%s\\t%s\\n" "$(wc -c < "$f")" '
+            'printf "%s\\t%s\\t%s\\n" "$(ls -l "$f" | awk \'{print $5}\')" '
             '"$(date -r "$f" +%s 2>/dev/null || echo 0)" "$f"; done'
         )
         with self._lock:
