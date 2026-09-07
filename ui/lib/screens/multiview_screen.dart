@@ -21,7 +21,7 @@ class MultiViewScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('CamControl'),
+        title: const Text('Wolff IoT Platform for Cameras'),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../main.dart';
+import '../models/gateway_profile.dart';
 import 'camera_edit_screen.dart';
 import 'discovery_screen.dart';
 import 'storage_settings_screen.dart';
@@ -14,34 +15,80 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  late TextEditingController _nameCtrl;
   late TextEditingController _urlCtrl;
   late TextEditingController _keyCtrl;
+  late TextEditingController _userCtrl;
+  final _passCtrl = TextEditingController();
   bool _obscureKey = true;
+  bool _obscurePass = true;
   bool _saved = false;
+  bool _loggingIn = false;
+  String? _loginError;
 
   @override
   void initState() {
     super.initState();
-    final state = context.read<AppState>();
-    _urlCtrl = TextEditingController(text: state.baseUrl);
-    _keyCtrl = TextEditingController(text: state.apiKey);
+    _loadFromActiveProfile();
+  }
+
+  void _loadFromActiveProfile() {
+    final profile = context.read<AppState>().activeProfile;
+    _nameCtrl = TextEditingController(text: profile.name);
+    _urlCtrl = TextEditingController(text: profile.baseUrl);
+    _keyCtrl = TextEditingController(text: profile.apiKey);
+    _userCtrl = TextEditingController(text: profile.username);
   }
 
   @override
   void dispose() {
+    _nameCtrl.dispose();
     _urlCtrl.dispose();
     _keyCtrl.dispose();
+    _userCtrl.dispose();
+    _passCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _save() async {
-    await context.read<AppState>().saveSettings(
-          _urlCtrl.text.trim(),
-          _keyCtrl.text.trim(),
-        );
+  Future<void> _saveProfile() async {
+    final state = context.read<AppState>();
+    await state.saveProfile(
+      GatewayProfile(
+        name: _nameCtrl.text.trim().isEmpty ? 'Gateway' : _nameCtrl.text.trim(),
+        baseUrl: _urlCtrl.text.trim(),
+        apiKey: _keyCtrl.text.trim(),
+        username: state.activeProfile.username,
+        token: state.activeProfile.token,
+      ),
+      index: state.activeProfileIndex,
+    );
     setState(() => _saved = true);
     await Future<void>.delayed(const Duration(seconds: 2));
     if (mounted) setState(() => _saved = false);
+  }
+
+  Future<void> _addProfile(String name, String baseUrl) async {
+    final state = context.read<AppState>();
+    await state.saveProfile(GatewayProfile(name: name, baseUrl: baseUrl));
+    await state.selectProfile(state.profiles.length - 1);
+    setState(_loadFromActiveProfile);
+  }
+
+  Future<void> _login() async {
+    setState(() {
+      _loggingIn = true;
+      _loginError = null;
+    });
+    try {
+      await context
+          .read<AppState>()
+          .login(_userCtrl.text.trim(), _passCtrl.text);
+      _passCtrl.clear();
+    } catch (e) {
+      _loginError = e.toString();
+    } finally {
+      if (mounted) setState(() => _loggingIn = false);
+    }
   }
 
   @override
@@ -56,6 +103,56 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Text('Gateway connection',
               style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 12),
+          DropdownButton<int>(
+            isExpanded: true,
+            value: state.activeProfileIndex,
+            items: [
+              for (var i = 0; i < state.profiles.length; i++)
+                DropdownMenuItem(value: i, child: Text(state.profiles[i].name)),
+            ],
+            onChanged: (i) async {
+              if (i == null) return;
+              await state.selectProfile(i);
+              setState(_loadFromActiveProfile);
+            },
+          ),
+          Row(
+            children: [
+              TextButton.icon(
+                icon: const Icon(Icons.add),
+                label: const Text('Add Local'),
+                onPressed: () =>
+                    _addProfile('Local', 'http://192.168.1.x:8080'),
+              ),
+              TextButton.icon(
+                icon: const Icon(Icons.cloud_outlined),
+                label: const Text('Add Azure'),
+                onPressed: () => _addProfile(
+                  'Azure',
+                  'https://<your-app>.azurewebsites.net',
+                ),
+              ),
+              if (state.profiles.length > 1)
+                IconButton(
+                  icon: const Icon(Icons.delete_outline),
+                  tooltip: 'Delete this profile',
+                  onPressed: () async {
+                    await state.deleteProfile(state.activeProfileIndex);
+                    setState(_loadFromActiveProfile);
+                  },
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _nameCtrl,
+            decoration: const InputDecoration(
+              labelText: 'Profile name',
+              border: OutlineInputBorder(),
+              prefixIcon: Icon(Icons.label_outline),
+            ),
+          ),
+          const SizedBox(height: 16),
           TextField(
             controller: _urlCtrl,
             decoration: const InputDecoration(
@@ -72,8 +169,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             controller: _keyCtrl,
             obscureText: _obscureKey,
             decoration: InputDecoration(
-              labelText: 'API Key (optional)',
-              hintText: 'Leave blank if API_KEY is not set',
+              labelText: 'API Key (legacy, optional)',
+              hintText: 'Only needed for admin-only endpoints',
               border: const OutlineInputBorder(),
               prefixIcon: const Icon(Icons.key),
               suffixIcon: IconButton(
@@ -84,17 +181,90 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             autocorrect: false,
           ),
-          const SizedBox(height: 8),
-          const Text(
-            'The API key must match API_KEY on the gateway. '
-            'Store it securely and rotate regularly.',
-            style: TextStyle(fontSize: 12),
-          ),
           const SizedBox(height: 24),
           FilledButton.icon(
             icon: Icon(_saved ? Icons.check : Icons.save),
-            label: Text(_saved ? 'Saved' : 'Save'),
-            onPressed: _save,
+            label: Text(_saved ? 'Saved' : 'Save gateway'),
+            onPressed: _saveProfile,
+          ),
+          const SizedBox(height: 32),
+          const Divider(),
+          const SizedBox(height: 12),
+          Text('Account', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          if (state.token.isNotEmpty)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.verified_user, color: Colors.green),
+              title: Text('Signed in as ${state.username}'),
+              trailing: TextButton(
+                onPressed: () => state.logout(),
+                child: const Text('Log out'),
+              ),
+            )
+          else ...[
+            TextField(
+              controller: _userCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Username',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.person_outline),
+              ),
+              autocorrect: false,
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _passCtrl,
+              obscureText: _obscurePass,
+              decoration: InputDecoration(
+                labelText: 'Password',
+                border: const OutlineInputBorder(),
+                prefixIcon: const Icon(Icons.lock_outline),
+                suffixIcon: IconButton(
+                  icon: Icon(
+                      _obscurePass ? Icons.visibility : Icons.visibility_off),
+                  onPressed: () => setState(() => _obscurePass = !_obscurePass),
+                ),
+              ),
+              onSubmitted: (_) => _login(),
+            ),
+            if (_loginError != null) ...[
+              const SizedBox(height: 8),
+              Text(_loginError!, style: const TextStyle(color: Colors.red)),
+            ],
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              icon: _loggingIn
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.login),
+              label: const Text('Log in'),
+              onPressed: _loggingIn ? null : _login,
+            ),
+          ],
+          const SizedBox(height: 32),
+          const Divider(),
+          const SizedBox(height: 12),
+          Text('Live view refresh', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          Text(
+            state.pollIntervalSeconds == 0
+                ? 'Using each camera\'s recommended interval'
+                : 'Every ${state.pollIntervalSeconds}s',
+            style: const TextStyle(fontSize: 12),
+          ),
+          Slider(
+            value: state.pollIntervalSeconds.toDouble(),
+            min: 0,
+            max: 30,
+            divisions: 30,
+            label: state.pollIntervalSeconds == 0
+                ? 'Auto'
+                : '${state.pollIntervalSeconds}s',
+            onChanged: (v) => state.setPollIntervalSeconds(v.round()),
           ),
           const SizedBox(height: 32),
           const Divider(),

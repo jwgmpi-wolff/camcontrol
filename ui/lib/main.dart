@@ -1,8 +1,11 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'models/camera.dart';
+import 'models/gateway_profile.dart';
 import 'services/api_service.dart';
 import 'screens/multiview_screen.dart';
 import 'screens/media_browser_screen.dart';
@@ -21,29 +24,109 @@ void main() async {
 
 class AppState extends ChangeNotifier {
   AppState(this._prefs) {
-    _baseUrl = _prefs.getString('baseUrl') ?? 'http://192.168.1.x:8080';
-    _apiKey = _prefs.getString('apiKey') ?? '';
+    _loadProfiles();
+    _pollIntervalSeconds = _prefs.getInt('pollIntervalSeconds') ?? 0;
   }
 
   final SharedPreferences _prefs;
-  String _baseUrl = 'http://192.168.1.x:8080';
-  String _apiKey = '';
+  List<GatewayProfile> profiles = [];
+  int _activeIndex = 0;
+  int _pollIntervalSeconds = 0; // 0 = use each camera's own default
 
-  String get baseUrl => _baseUrl;
-  String get apiKey => _apiKey;
+  GatewayProfile get activeProfile => profiles[_activeIndex];
+  int get activeProfileIndex => _activeIndex;
 
-  late final ApiService api = ApiService(() => _baseUrl, () => _apiKey);
+  String get baseUrl => profiles.isEmpty ? '' : activeProfile.baseUrl;
+  String get apiKey => profiles.isEmpty ? '' : activeProfile.apiKey;
+  String get token => profiles.isEmpty ? '' : activeProfile.token;
+  String get username => profiles.isEmpty ? '' : activeProfile.username;
+
+  /// 0 means "use each camera's own recommended interval".
+  int get pollIntervalSeconds => _pollIntervalSeconds;
+
+  late final ApiService api = ApiService(() => baseUrl, () => apiKey, () => token);
 
   String status = 'disconnected';
   List<Camera> cameras = [];
 
-  Future<void> saveSettings(String url, String key) async {
-    _baseUrl = url;
-    _apiKey = key;
-    await _prefs.setString('baseUrl', url);
-    await _prefs.setString('apiKey', key);
+  void _loadProfiles() {
+    final raw = _prefs.getString('gatewayProfiles');
+    if (raw != null) {
+      final list = jsonDecode(raw) as List;
+      profiles = list
+          .map((e) => GatewayProfile.fromJson(e as Map<String, dynamic>))
+          .toList();
+    }
+    if (profiles.isEmpty) {
+      // Migrate the old single baseUrl/apiKey prefs into a "Local" profile.
+      final legacyUrl = _prefs.getString('baseUrl') ?? 'http://192.168.1.x:8080';
+      final legacyKey = _prefs.getString('apiKey') ?? '';
+      profiles = [GatewayProfile(name: 'Local', baseUrl: legacyUrl, apiKey: legacyKey)];
+    }
+    _activeIndex = _prefs.getInt('activeProfileIndex') ?? 0;
+    if (_activeIndex < 0 || _activeIndex >= profiles.length) _activeIndex = 0;
+  }
+
+  Future<void> _saveProfiles() async {
+    await _prefs.setString(
+      'gatewayProfiles',
+      jsonEncode(profiles.map((p) => p.toJson()).toList()),
+    );
+    await _prefs.setInt('activeProfileIndex', _activeIndex);
+  }
+
+  Future<void> selectProfile(int index) async {
+    if (index < 0 || index >= profiles.length) return;
+    _activeIndex = index;
+    await _prefs.setInt('activeProfileIndex', _activeIndex);
     notifyListeners();
     await refreshCameras();
+  }
+
+  /// Adds a new profile (if [index] is null / out of range) or updates the
+  /// profile at [index] in place.
+  Future<void> saveProfile(GatewayProfile profile, {int? index}) async {
+    if (index != null && index >= 0 && index < profiles.length) {
+      profiles[index] = profile;
+    } else {
+      profiles.add(profile);
+      index = profiles.length - 1;
+    }
+    await _saveProfiles();
+    notifyListeners();
+    if (index == _activeIndex) await refreshCameras();
+  }
+
+  Future<void> deleteProfile(int index) async {
+    if (index < 0 || index >= profiles.length) return;
+    profiles.removeAt(index);
+    if (profiles.isEmpty) {
+      profiles = [GatewayProfile(name: 'Local', baseUrl: 'http://192.168.1.x:8080')];
+    }
+    if (_activeIndex >= profiles.length) _activeIndex = 0;
+    await _saveProfiles();
+    notifyListeners();
+    await refreshCameras();
+  }
+
+  Future<void> login(String username, String password) async {
+    final issuedToken = await api.login(username, password);
+    activeProfile.username = username;
+    activeProfile.token = issuedToken;
+    await _saveProfiles();
+    notifyListeners();
+  }
+
+  void logout() {
+    activeProfile.token = '';
+    _saveProfiles();
+    notifyListeners();
+  }
+
+  Future<void> setPollIntervalSeconds(int seconds) async {
+    _pollIntervalSeconds = seconds;
+    await _prefs.setInt('pollIntervalSeconds', seconds);
+    notifyListeners();
   }
 
   Future<void> refreshCameras() async {
@@ -59,13 +142,14 @@ class AppState extends ChangeNotifier {
   }
 }
 
+
 class CamControlApp extends StatelessWidget {
   const CamControlApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'CamControl',
+      title: 'Wolff IoT Platform for Cameras',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: const Color(0xFF0078D4), // Azure blue

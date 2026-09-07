@@ -15,15 +15,18 @@ class ApiException implements Exception {
 }
 
 class ApiService {
-  ApiService(this._baseUrl, this._apiKey);
+  ApiService(this._baseUrl, this._apiKey, this._token);
 
   final String Function() _baseUrl;
   final String Function() _apiKey;
+  final String Function() _token;
 
   Map<String, String> get _headers {
+    final token = _token();
     final key = _apiKey();
     return {
       'Content-Type': 'application/json',
+      if (token.isNotEmpty) 'Authorization': 'Bearer $token',
       if (key.isNotEmpty) 'X-API-Key': key,
     };
   }
@@ -48,6 +51,20 @@ class ApiService {
     final res = await http.get(_uri('/api/health'), headers: _headers);
     _check(res);
     return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  /// Logs in with a username/password and returns a bearer token good for
+  /// 24 hours. Callers are responsible for storing it and passing it back
+  /// in via the `token` closure given to this service's constructor.
+  Future<String> login(String username, String password) async {
+    final res = await http.post(
+      _uri('/api/auth/login'),
+      headers: const {'Content-Type': 'application/json'},
+      body: jsonEncode({'username': username, 'password': password}),
+    );
+    _check(res);
+    final decoded = jsonDecode(res.body) as Map<String, dynamic>;
+    return decoded['token'] as String;
   }
 
   Future<List<Camera>> listCameras() async {
@@ -108,6 +125,33 @@ class ApiService {
         '/api/cameras/$cameraId/media/download',
         {'path': path},
       );
+
+  Future<Map<String, dynamic>> startRecording(String cameraId) async {
+    final res = await http.post(
+      _uri('/api/cameras/$cameraId/record/start'),
+      headers: _headers,
+    );
+    _check(res);
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> stopRecording(String cameraId) async {
+    final res = await http.post(
+      _uri('/api/cameras/$cameraId/record/stop'),
+      headers: _headers,
+    );
+    _check(res);
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> recordingStatus(String cameraId) async {
+    final res = await http.get(
+      _uri('/api/cameras/$cameraId/record/status'),
+      headers: _headers,
+    );
+    _check(res);
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
 
   Future<Map<String, dynamic>> getConfig() async {
     final res = await http.get(_uri('/api/config'), headers: _headers);

@@ -1,5 +1,10 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:video_player/video_player.dart';
 
 import '../main.dart';
@@ -21,6 +26,7 @@ class MediaViewerScreen extends StatefulWidget {
 
 class _MediaViewerScreenState extends State<MediaViewerScreen> {
   VideoPlayerController? _controller;
+  bool _sharing = false;
 
   @override
   void initState() {
@@ -45,6 +51,33 @@ class _MediaViewerScreenState extends State<MediaViewerScreen> {
     super.dispose();
   }
 
+  Future<void> _share() async {
+    if (_sharing) return;
+    setState(() => _sharing = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final state = context.read<AppState>();
+      final uri = state.api.mediaDownloadUri(widget.cameraId, widget.file.path);
+      final headers = <String, String>{
+        if (state.token.isNotEmpty) 'Authorization': 'Bearer ${state.token}',
+        if (state.apiKey.isNotEmpty) 'X-API-Key': state.apiKey,
+      };
+      final res = await http.get(uri, headers: headers);
+      if (res.statusCode >= 400) {
+        throw Exception('Download failed: HTTP ${res.statusCode}');
+      }
+      final dir = await getTemporaryDirectory();
+      final fileName = widget.file.path.split('/').last;
+      final tempFile = File('${dir.path}/$fileName');
+      await tempFile.writeAsBytes(res.bodyBytes);
+      await Share.shareXFiles([XFile(tempFile.path)], text: widget.file.path);
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Share failed: $e')));
+    } finally {
+      if (mounted) setState(() => _sharing = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
@@ -53,7 +86,22 @@ class _MediaViewerScreenState extends State<MediaViewerScreen> {
         state.apiKey.isNotEmpty ? {'X-API-Key': state.apiKey} : <String, String>{};
 
     return Scaffold(
-      appBar: AppBar(title: Text(widget.file.path)),
+      appBar: AppBar(
+        title: Text(widget.file.path),
+        actions: [
+          IconButton(
+            icon: _sharing
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.share),
+            tooltip: 'Share',
+            onPressed: _sharing ? null : _share,
+          ),
+        ],
+      ),
       body: Center(
         child: widget.file.mediaType == 'video'
             ? _buildVideo()

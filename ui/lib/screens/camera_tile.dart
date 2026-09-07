@@ -23,10 +23,19 @@ class _CameraTileState extends State<CameraTile> with WidgetsBindingObserver {
   Uint8List? _frame;
   String? _error;
   bool _fetching = false;
+  bool _recording = false;
+  bool _busy = false;
+
+  Duration _pollInterval(BuildContext context) {
+    final override = context.read<AppState>().pollIntervalSeconds;
+    return override > 0
+        ? Duration(seconds: override)
+        : widget.camera.recommendedPollInterval;
+  }
 
   void _startPolling() {
     _poll();
-    _timer = Timer.periodic(widget.camera.recommendedPollInterval, (_) => _poll());
+    _timer = Timer.periodic(_pollInterval(context), (_) => _poll());
   }
 
   void _stopPolling() {
@@ -45,6 +54,43 @@ class _CameraTileState extends State<CameraTile> with WidgetsBindingObserver {
       if (mounted) setState(() => _error = e.toString());
     } finally {
       _fetching = false;
+    }
+  }
+
+  Future<void> _takeSnapshot() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await context.read<AppState>().api.captureAndStore(widget.camera.id);
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Snapshot saved to storage')),
+      );
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Snapshot failed: $e')));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _toggleRecording() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    final messenger = ScaffoldMessenger.of(context);
+    final api = context.read<AppState>().api;
+    try {
+      if (_recording) {
+        await api.stopRecording(widget.camera.id);
+        messenger.showSnackBar(const SnackBar(content: Text('Recording stopped')));
+      } else {
+        await api.startRecording(widget.camera.id);
+        messenger.showSnackBar(const SnackBar(content: Text('Recording started')));
+      }
+      if (mounted) setState(() => _recording = !_recording);
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Recording failed: $e')));
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -91,6 +137,22 @@ class _CameraTileState extends State<CameraTile> with WidgetsBindingObserver {
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.labelMedium,
                   ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.camera_alt, size: 18),
+                  tooltip: 'Take snapshot',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: _busy ? null : _takeSnapshot,
+                ),
+                IconButton(
+                  icon: Icon(
+                    _recording ? Icons.stop_circle : Icons.fiber_manual_record,
+                    size: 18,
+                    color: _recording ? Colors.red : null,
+                  ),
+                  tooltip: _recording ? 'Stop recording' : 'Start recording',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: _busy ? null : _toggleRecording,
                 ),
                 Icon(
                   _error == null ? Icons.circle : Icons.error,
