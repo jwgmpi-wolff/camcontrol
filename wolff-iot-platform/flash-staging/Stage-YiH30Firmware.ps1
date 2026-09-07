@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-  Stage the correct Hi3518e yi-hack-v3 firmware (rootfs_h30 / home_h30) onto a
+  Stage the correct Hi3518e custom firmware (rootfs_h30 / home_h30) onto a
   FAT32 microSD card for this specific camera (YI Outdoor 1080p, YHS.3017).
 
 .DESCRIPTION
@@ -12,9 +12,10 @@
   Safety checks performed before any copy:
     - Destination drive must exist and be removable (SD card / USB reader).
     - Destination filesystem must be FAT32 (exFAT is rejected by the loader).
-    - Destination must NOT already contain an Allwinner-v2 layout
-      (Factory/ or yi-hack/ folders) -- mixing firmware families for two
-      different chipsets on one card is a bricking risk.
+    - Destination must NOT already contain an Allwinner-targeted layout
+      (Factory/ or yi-hack/ folders, matching that project's own on-disk
+      naming) -- mixing firmware families for two different chipsets on one
+      card is a bricking risk.
     - Source firmware files must match the pinned SHA-256 in yi.cfg exactly.
 
 .PARAMETER DriveLetter
@@ -75,7 +76,7 @@ if ($diskDrive -and $diskDrive.BusType -eq 'NVMe') {
 $staleAllwinnerMarkers = @('Factory', 'yi-hack') | ForEach-Object { Join-Path $drive $_ }
 $found = $staleAllwinnerMarkers | Where-Object { Test-Path $_ }
 if ($found) {
-    throw "Drive $drive already contains an Allwinner-v2 layout ($($found -join ', ')). This card was previously prepared for a different chipset family. Erase the card fully before staging the Hi3518e (rootfs_h30/home_h30) firmware to avoid a mixed/bricking flash."
+    throw "Drive $drive already contains an Allwinner-targeted layout ($($found -join ', ')). This card was previously prepared for a different chipset family. Erase the card fully before staging the Hi3518e (rootfs_h30/home_h30) firmware to avoid a mixed/bricking flash."
 }
 
 foreach ($name in $expected.Keys) {
@@ -89,4 +90,4 @@ Write-Host "`nSD card staged. Remaining manual steps:" -ForegroundColor Cyan
 Write-Host "  1. Safely eject drive $drive from this PC."
 Write-Host "  2. Power off the camera, insert the microSD card, power the camera back on."
 Write-Host "  3. Watch for the yellow LED to flash for ~30 seconds (firmware writing)."
-Write-Host "  4. Find the camera's IP (e.g. via router DHCP list) and open it in a browser to confirm the yi-hack-v3 web UI loads."
+Write-Host "  4. Find the camera's IP (e.g. via router DHCP list) and open it in a browser to confirm the custom firmware's web UI loads."

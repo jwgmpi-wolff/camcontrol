@@ -17,10 +17,13 @@ build_tmp/
 # as the app is used -- keep the live config out of git.
 config/cameras.json
 
+# User accounts (password hashes) for the gateway's own auth -- never commit.
+config/users.json
+
 # This camera's root password is a real, live secret once filled in --
 # never commit it. The WiFi PSK in wpa_supplicant.conf in the same folder
 # is a one-way-derived hex key and is safe to commit.
-camera-platform/flash-staging-yhs113/sdcard/test/yi-hack.cfg
+wolff-iot-platform/flash-staging-yhs113/sdcard/test/yi-hack.cfg
 
 # Flutter/Dart tooling artifacts
 ui/.dart_tool/

@@ -1,22 +1,22 @@
 # Flash staging -- YI Home Camera (YHS-113-IR)
 
 This is a **different camera** from the YI Outdoor (YHS.3017) already flashed
-in [../flash-staging](../flash-staging). It uses a **different upstream
-project** and a fundamentally different (safer) install mechanism.
+in [../flash-staging](../flash-staging). It uses a **different third-party
+firmware project** and a fundamentally different (safer) install mechanism.
 
 ## Identification
 
 - Model: **YHS-113-IR**, FCC ID `2AFIB-H1500A`, CMIIT ID `2014DP4828`
   (Shanghai Xiaoyi Technology Co., Ltd.) -- the original ~2014 "Yi Home /
   Yi Ants" camera.
-- `shadow-1/yi-hack-v3` (used for the other camera) has **never** supported
-  this model -- confirmed by checking every release (0.1.0 through 0.1.6):
-  no unsuffixed `rootfs`/`home` assets exist in any release, and plain
-  "Yi Home" is never listed as supported.
-- The correct project for this hardware is
-  [`fritz-smh/yi-hack`](https://github.com/fritz-smh/yi-hack) -- the
-  original hack, built specifically for this camera. Confirms the same
-  Hi3518 SoC family (`cd /home/3518; ./load3518_left`).
+- The shadow-1 Hi3518e custom firmware project (used for the other camera)
+  has **never** supported this model -- confirmed by checking every release
+  (0.1.0 through 0.1.6): no unsuffixed `rootfs`/`home` assets exist in any
+  release, and plain "Yi Home" is never listed as supported.
+- The correct project for this hardware is the original fritz-smh custom
+  firmware project (`github.com/fritz-smh/yi-hack`), built specifically for
+  this camera. Confirms the same Hi3518 SoC family
+  (`cd /home/3518; ./load3518_left`).
 
 ## How this mechanism differs from the other camera
 
@@ -34,9 +34,10 @@ project** and a fundamentally different (safer) install mechanism.
 
 ## Contents
 
-- `sdcard/home` -- the "M" release firmware image from `fritz-smh/yi-hack`.
+- `sdcard/home` -- the "M" release firmware image from the fritz-smh project.
 - `sdcard/test/rtspsvrM`, `sdcard/test/http/serverM` -- matching binaries.
-- `sdcard/test/yi-hack.cfg` -- network config. Already filled in:
+- `sdcard/test/yi-hack.cfg` -- network config (filename fixed by
+  `equip_test.sh`, do not rename). Already filled in:
   `IP=10.0.0.150`, `NETMASK=255.255.255.0`, `GATEWAY=10.0.0.1`,
   `NAMESERVER=10.0.0.1`.
 - `sdcard/test/wpa_supplicant.conf` -- WiFi config. Already filled in:
@@ -60,7 +61,8 @@ Open these two files yourself and replace the placeholders:
 3. Insert the card into the camera, then power it on.
 4. Watch the LED: orange (startup) -> blue blinking (network config) ->
    blue solid (ready).
-5. Browse to `http://10.0.0.150/` to confirm the hack's status page loads.
+5. Browse to `http://10.0.0.150/` to confirm the custom firmware's status
+   page loads.
 6. **Leave the SD card in the camera permanently** -- removing it reverts
    to stock.
 
@@ -68,8 +70,3 @@ Open these two files yourself and replace the placeholders:
 
 - RTSP: `rtsp://10.0.0.150:554/ch0_0.h264` (HD) or `ch0_1.h264` (low-res).
 - Telnet on port 23 (`root` / the password you set above).
-- FTP on port 21 (no login).
-- Motion-triggered recordings land on the SD card and are reachable via the
-  HTTP/FTP servers above -- this camera type can plug directly into
-  CamControl's existing RTSP capture path (unlike the other camera, no
-  SSH-mmap workaround is needed here).
