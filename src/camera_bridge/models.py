@@ -27,7 +27,7 @@ class LiveViewConfig(BaseModel):
     without going through the gateway. Off by default (opt-in per camera)."""
 
     enabled: bool = False
-    poll_interval_seconds: float = 5.0
+    poll_interval_seconds: float = 3.0
 
 
 class Hi3518eSshCameraConfig(BaseModel):

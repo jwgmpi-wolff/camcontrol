@@ -43,7 +43,7 @@ _LIVE_HTML = """<!DOCTYPE html>
   var img = document.getElementById('frame');
   setInterval(function () {
     img.src = 'live.jpg?t=' + Date.now();
-  }, 5000);
+  }, 3000);
 </script>
 </body>
 </html>
@@ -58,7 +58,7 @@ class LiveViewPublisher:
         camera_id: str,
         config: Hi3518eSshCameraConfig,
         backend: CaptureBackend,
-        poll_interval_seconds: float = 5.0,
+        poll_interval_seconds: float = 3.0,
     ) -> None:
         self._camera_id = camera_id
         self._config = config

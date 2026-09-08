@@ -26,7 +26,7 @@ class CameraEditScreen extends StatefulWidget {
 
 class _CameraEditScreenState extends State<CameraEditScreen> {
   final _formKey = GlobalKey<FormState>();
-  String _type = 'yi_hack_v3_ssh';
+  String _type = 'hi3518e_ssh';
   bool _loading = true;
   bool _saving = false;
   String? _error;
@@ -40,6 +40,9 @@ class _CameraEditScreenState extends State<CameraEditScreen> {
   final _remoteViewCtrl = TextEditingController(text: '/tmp/view');
   final _remoteMediaCtrl = TextEditingController(text: '/tmp/sd');
   final _rtspUrlCtrl = TextEditingController();
+  bool _liveViewEnabled = false;
+  final _liveViewIntervalCtrl = TextEditingController(text: '3');
+  Map<String, dynamic>? _existingMotion;
 
   List<Map<String, dynamic>> _allCameras = [];
 
@@ -64,12 +67,17 @@ class _CameraEditScreenState extends State<CameraEditScreen> {
           _type = match['type'] as String;
           _idCtrl.text = match['id'] as String;
           _nameCtrl.text = match['name'] as String;
-          if (_type == 'yi_hack_v3_ssh') {
+          if (_type == 'hi3518e_ssh') {
             _hostCtrl.text = match['host'] as String? ?? '';
             _portCtrl.text = '${match['port'] ?? 22}';
             _usernameCtrl.text = match['username'] as String? ?? 'root';
             _remoteViewCtrl.text = match['remote_view_path'] as String? ?? '/tmp/view';
             _remoteMediaCtrl.text = match['remote_media_dir'] as String? ?? '/tmp/sd';
+            _existingMotion = match['motion'] as Map<String, dynamic>?;
+            final liveView = match['live_view'] as Map<String, dynamic>?;
+            _liveViewEnabled = liveView?['enabled'] as bool? ?? false;
+            _liveViewIntervalCtrl.text =
+                '${liveView?['poll_interval_seconds'] ?? 3}';
           } else {
             _rtspUrlCtrl.text = match['rtsp_url'] as String? ?? '';
           }
@@ -100,11 +108,12 @@ class _CameraEditScreenState extends State<CameraEditScreen> {
     _remoteViewCtrl.dispose();
     _remoteMediaCtrl.dispose();
     _rtspUrlCtrl.dispose();
+    _liveViewIntervalCtrl.dispose();
     super.dispose();
   }
 
   Map<String, dynamic> _buildEntry() {
-    if (_type == 'yi_hack_v3_ssh') {
+    if (_type == 'hi3518e_ssh') {
       final existingPassword = widget.existing != null
           ? (_allCameras.firstWhere(
                 (c) => c['id'] == widget.existing!.id,
@@ -113,7 +122,7 @@ class _CameraEditScreenState extends State<CameraEditScreen> {
               '')
           : '';
       return {
-        'type': 'yi_hack_v3_ssh',
+        'type': 'hi3518e_ssh',
         'id': _idCtrl.text.trim(),
         'name': _nameCtrl.text.trim(),
         'host': _hostCtrl.text.trim(),
@@ -127,6 +136,12 @@ class _CameraEditScreenState extends State<CameraEditScreen> {
             : existingPassword,
         'remote_view_path': _remoteViewCtrl.text.trim(),
         'remote_media_dir': _remoteMediaCtrl.text.trim(),
+        if (_existingMotion != null) 'motion': _existingMotion,
+        'live_view': {
+          'enabled': _liveViewEnabled,
+          'poll_interval_seconds':
+              double.tryParse(_liveViewIntervalCtrl.text.trim()) ?? 3.0,
+        },
       };
     }
     return {
@@ -200,8 +215,8 @@ class _CameraEditScreenState extends State<CameraEditScreen> {
             SegmentedButton<String>(
               segments: const [
                 ButtonSegment(
-                  value: 'yi_hack_v3_ssh',
-                  label: Text('yi-hack-v3 (SSH)'),
+                  value: 'hi3518e_ssh',
+                  label: Text('Hi3518e custom firmware (SSH)'),
                 ),
                 ButtonSegment(value: 'rtsp', label: Text('RTSP')),
               ],
@@ -232,7 +247,7 @@ class _CameraEditScreenState extends State<CameraEditScreen> {
                   (v == null || v.trim().isEmpty) ? 'Required' : null,
             ),
             const SizedBox(height: 12),
-            if (_type == 'yi_hack_v3_ssh') ..._buildSshFields(),
+            if (_type == 'hi3518e_ssh') ..._buildSshFields(),
             if (_type == 'rtsp') ..._buildRtspFields(),
             const SizedBox(height: 24),
             FilledButton.icon(
@@ -304,6 +319,31 @@ class _CameraEditScreenState extends State<CameraEditScreen> {
           labelText: 'Remote SD-card media directory',
           border: OutlineInputBorder(),
         ),
+      ),
+      const SizedBox(height: 20),
+      const Divider(),
+      const SizedBox(height: 8),
+      Text('Live view (direct from camera)',
+          style: Theme.of(context).textTheme.titleSmall),
+      const Text(
+        'Publishes a refreshing snapshot to the camera\'s own web server '
+        'at http://<camera-ip>/live.html, viewable without the app/gateway.',
+        style: TextStyle(fontSize: 12),
+      ),
+      SwitchListTile(
+        contentPadding: EdgeInsets.zero,
+        title: const Text('Enable live view'),
+        value: _liveViewEnabled,
+        onChanged: (v) => setState(() => _liveViewEnabled = v),
+      ),
+      TextFormField(
+        controller: _liveViewIntervalCtrl,
+        enabled: _liveViewEnabled,
+        decoration: const InputDecoration(
+          labelText: 'Refresh interval (seconds)',
+          border: OutlineInputBorder(),
+        ),
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
       ),
     ];
   }
