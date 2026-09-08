@@ -28,7 +28,6 @@ jobs:
       # updated in place from the Releases page) instead of a fresh debug key each
       # run. Falls back to the debug key automatically if the secrets aren't set.
       - name: Configure release signing
-        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
         working-directory: ui/android
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -36,6 +35,10 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "No release keystore secret set, falling back to the debug key."
+            exit 0
+          fi
           echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > app/camcontrol-release.jks
           printf 'storeFile=%s/app/camcontrol-release.jks\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' \
             "$(pwd)" "$ANDROID_KEYSTORE_PASSWORD" "$ANDROID_KEY_ALIAS" "$ANDROID_KEY_PASSWORD" > key.properties
