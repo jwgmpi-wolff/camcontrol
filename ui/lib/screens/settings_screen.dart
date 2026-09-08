@@ -19,7 +19,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late TextEditingController _urlCtrl;
   late TextEditingController _keyCtrl;
   late TextEditingController _userCtrl;
-  late TextEditingController _hostCtrl;
   final _passCtrl = TextEditingController();
   bool _obscureKey = true;
   bool _obscurePass = true;
@@ -40,7 +39,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _urlCtrl = TextEditingController(text: profile.baseUrl);
     _keyCtrl = TextEditingController(text: profile.apiKey);
     _userCtrl = TextEditingController(text: profile.username);
-    _hostCtrl = TextEditingController(text: profile.directHost);
     _mode = profile.mode;
   }
 
@@ -50,7 +48,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _urlCtrl.dispose();
     _keyCtrl.dispose();
     _userCtrl.dispose();
-    _hostCtrl.dispose();
     _passCtrl.dispose();
     super.dispose();
   }
@@ -67,7 +64,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         username: state.activeProfile.username,
         token: state.activeProfile.token,
         mode: _mode,
-        directHost: _hostCtrl.text.trim(),
+        directCameras: state.activeProfile.directCameras,
       ),
       index: state.activeProfileIndex,
     );
@@ -86,7 +83,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _addDirectProfile() async {
     final state = context.read<AppState>();
     await state.saveProfile(
-      GatewayProfile(name: 'Direct camera', baseUrl: '', mode: 'direct'),
+      GatewayProfile(name: 'Direct cameras', baseUrl: '', mode: 'direct'),
     );
     await state.selectProfile(state.profiles.length - 1);
     setState(_loadFromActiveProfile);
@@ -223,19 +220,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               autocorrect: false,
             ),
           ] else ...[
-            TextField(
-              controller: _hostCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Camera address (IP or DDNS)',
-                hintText: '192.168.1.50 or myhome.duckdns.org:8080',
-                helperText: 'Talks straight to the camera\'s own live view '
-                    'page -- no gateway needed. Works with a port-forwarded '
-                    'public address too.',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.videocam_outlined),
-              ),
-              keyboardType: TextInputType.url,
-              autocorrect: false,
+            Text(
+              'Cameras for this profile are added from the Camera tab '
+              '(tap the + button there).',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
             ),
           ],
           const SizedBox(height: 24),

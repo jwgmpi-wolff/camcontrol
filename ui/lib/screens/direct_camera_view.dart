@@ -7,12 +7,15 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../main.dart';
+import '../models/direct_camera.dart';
 
-/// Full-screen live view for a gateway-less "Direct camera" profile. Polls
-/// the camera's own `/live.jpg` (published by live_view_publisher.py)
-/// straight over HTTP -- no camera_bridge gateway involved at all.
+/// Full-screen live view for one gateway-less "Direct camera". Polls the
+/// camera's own `/live.jpg` (published by live_view_publisher.py) straight
+/// over HTTP -- no camera_bridge gateway involved at all.
 class DirectCameraView extends StatefulWidget {
-  const DirectCameraView({super.key});
+  const DirectCameraView({super.key, required this.camera});
+
+  final DirectCamera camera;
 
   @override
   State<DirectCameraView> createState() => _DirectCameraViewState();
@@ -25,13 +28,14 @@ class _DirectCameraViewState extends State<DirectCameraView>
   String? _error;
   bool _fetching = false;
 
-  String _normalizedHost(BuildContext context) {
-    var host = context.read<AppState>().directHost.trim();
-    host = host.replaceFirst(RegExp(r'^https?://'), '');
-    while (host.endsWith('/')) {
-      host = host.substring(0, host.length - 1);
-    }
-    return host;
+  // Users often paste a full browser URL (e.g. "10.0.0.252/live.html") --
+  // extract just the host[:port] regardless of scheme/path they included.
+  String get _normalizedHost {
+    final input = widget.camera.host.trim();
+    if (input.isEmpty) return '';
+    final uri = Uri.tryParse(input.contains('://') ? input : 'http://$input');
+    if (uri == null || uri.host.isEmpty) return input;
+    return uri.hasPort ? '${uri.host}:${uri.port}' : uri.host;
   }
 
   Duration get _pollInterval {
@@ -51,7 +55,7 @@ class _DirectCameraViewState extends State<DirectCameraView>
 
   Future<void> _poll() async {
     if (_fetching || !mounted) return;
-    final host = _normalizedHost(context);
+    final host = _normalizedHost;
     if (host.isEmpty) {
       setState(() {
         _error = 'No camera address configured';
@@ -77,7 +81,7 @@ class _DirectCameraViewState extends State<DirectCameraView>
 
   Future<void> _openInBrowser() async {
     final messenger = ScaffoldMessenger.of(context);
-    final host = _normalizedHost(context);
+    final host = _normalizedHost;
     if (host.isEmpty) {
       messenger.showSnackBar(
         const SnackBar(content: Text('Set a camera address in Settings first')),
@@ -113,10 +117,9 @@ class _DirectCameraViewState extends State<DirectCameraView>
 
   @override
   Widget build(BuildContext context) {
-    final state = context.watch<AppState>();
     return Scaffold(
       appBar: AppBar(
-        title: Text(state.activeProfile.name),
+        title: Text(widget.camera.name),
         actions: [
           IconButton(
             icon: const Icon(Icons.open_in_browser),

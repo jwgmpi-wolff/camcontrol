@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'models/camera.dart';
+import 'models/direct_camera.dart';
 import 'models/gateway_profile.dart';
 import 'services/api_service.dart';
 import 'screens/multiview_screen.dart';
@@ -41,10 +42,44 @@ class AppState extends ChangeNotifier {
   String get token => profiles.isEmpty ? '' : activeProfile.token;
   String get username => profiles.isEmpty ? '' : activeProfile.username;
 
-  /// True when the active profile connects straight to a camera's own IP,
+  /// True when the active profile connects straight to cameras' own IPs,
   /// bypassing the camera_bridge gateway entirely.
   bool get isDirectMode => profiles.isNotEmpty && activeProfile.isDirect;
-  String get directHost => profiles.isEmpty ? '' : activeProfile.directHost;
+  List<DirectCamera> get directCameras =>
+      profiles.isEmpty ? [] : activeProfile.directCameras;
+
+  Future<void> addDirectCamera(String name, String host) async {
+    if (profiles.isEmpty) return;
+    activeProfile.directCameras.add(
+      DirectCamera(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        name: name,
+        host: host,
+      ),
+    );
+    await _saveProfiles();
+    notifyListeners();
+  }
+
+  Future<void> updateDirectCamera(
+    String id, {
+    required String name,
+    required String host,
+  }) async {
+    if (profiles.isEmpty) return;
+    final idx = activeProfile.directCameras.indexWhere((c) => c.id == id);
+    if (idx == -1) return;
+    activeProfile.directCameras[idx] = DirectCamera(id: id, name: name, host: host);
+    await _saveProfiles();
+    notifyListeners();
+  }
+
+  Future<void> removeDirectCamera(String id) async {
+    if (profiles.isEmpty) return;
+    activeProfile.directCameras.removeWhere((c) => c.id == id);
+    await _saveProfiles();
+    notifyListeners();
+  }
 
   /// 0 means "use each camera's own recommended interval".
   int get pollIntervalSeconds => _pollIntervalSeconds;
