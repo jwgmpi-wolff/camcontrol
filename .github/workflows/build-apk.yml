@@ -54,6 +54,11 @@ jobs:
         working-directory: ui
         run: flutter build apk --release
 
+      - name: Update latest tag
+        run: |
+          git tag --force latest "$GITHUB_SHA"
+          git push origin latest --force
+
       - name: Publish latest release
         uses: softprops/action-gh-release@v2
         with:
