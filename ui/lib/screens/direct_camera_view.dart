@@ -23,6 +23,7 @@ class DirectCameraView extends StatefulWidget {
 
 class _DirectCameraViewState extends State<DirectCameraView>
     with WidgetsBindingObserver {
+  http.Client _httpClient = http.Client();
   Timer? _timer;
   Uint8List? _frame;
   String? _error;
@@ -65,7 +66,7 @@ class _DirectCameraViewState extends State<DirectCameraView>
     }
     _fetching = true;
     try {
-      final res = await http
+      final res = await _httpClient
           .get(Uri.parse('http://$host/live.jpg?t=${DateTime.now().millisecondsSinceEpoch}'))
           .timeout(const Duration(seconds: 10));
       if (res.statusCode != 200) {
@@ -73,7 +74,11 @@ class _DirectCameraViewState extends State<DirectCameraView>
       }
       if (mounted) setState(() { _frame = res.bodyBytes; _error = null; });
     } catch (e) {
-      if (mounted) setState(() => _error = 'Unreachable: $e');
+      if (mounted) {
+        _httpClient.close();
+        _httpClient = http.Client();
+        setState(() => _error = 'Unreachable: $e');
+      }
     } finally {
       _fetching = false;
     }
@@ -105,6 +110,7 @@ class _DirectCameraViewState extends State<DirectCameraView>
   @override
   void dispose() {
     _stopPolling();
+    _httpClient.close();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }

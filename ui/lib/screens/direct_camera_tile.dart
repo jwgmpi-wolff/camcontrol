@@ -22,6 +22,7 @@ class DirectCameraTile extends StatefulWidget {
 
 class _DirectCameraTileState extends State<DirectCameraTile>
     with WidgetsBindingObserver {
+  http.Client _httpClient = http.Client();
   Timer? _timer;
   Uint8List? _frame;
   String? _error;
@@ -61,14 +62,18 @@ class _DirectCameraTileState extends State<DirectCameraTile>
     }
     _fetching = true;
     try {
-      final res = await http
+      final res = await _httpClient
           .get(Uri.parse(
               'http://$host/live.jpg?t=${DateTime.now().millisecondsSinceEpoch}'))
           .timeout(const Duration(seconds: 10));
       if (res.statusCode != 200) throw Exception('HTTP ${res.statusCode}');
       if (mounted) setState(() { _frame = res.bodyBytes; _error = null; });
     } catch (e) {
-      if (mounted) setState(() => _error = 'Unreachable');
+      if (mounted) {
+        _httpClient.close();
+        _httpClient = http.Client();
+        setState(() => _error = 'Unreachable');
+      }
     } finally {
       _fetching = false;
     }
@@ -84,6 +89,7 @@ class _DirectCameraTileState extends State<DirectCameraTile>
   @override
   void dispose() {
     _stopPolling();
+    _httpClient.close();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -112,8 +118,8 @@ class _DirectCameraTileState extends State<DirectCameraTile>
             TextField(
               controller: hostCtrl,
               decoration: const InputDecoration(
-                labelText: 'Address (IP or DDNS)',
-                hintText: '192.168.1.50 or myhome.duckdns.org:8080',
+                labelText: 'Camera URL or address',
+                hintText: 'http://192.168.1.50/live.html',
               ),
               keyboardType: TextInputType.url,
               autocorrect: false,
