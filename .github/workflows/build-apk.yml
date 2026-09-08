@@ -8,6 +8,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: build-apk-main
+  cancel-in-progress: true
+
 jobs:
   build-android:
     runs-on: ubuntu-latest
@@ -54,8 +58,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
-          name: Wolff IoT Platform for Cameras — Latest Build
-          body: Automatically built from ${{ github.sha }}. Always the newest working version -- download and install over the existing app.
+          name: CamControl - Latest Android Build
+          body: Automatically built from ${{ github.sha }}. Download the current signed APK from this release.
           files: ui/build/app/outputs/flutter-apk/app-release.apk
           make_latest: true
         env:
