@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../main.dart';
 import '../models/gateway_profile.dart';
@@ -15,6 +16,10 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  static final _readmeUri = Uri.parse(
+    'https://github.com/jwgmpi-wolff/camcontrol/blob/main/README.md',
+  );
+
   late TextEditingController _nameCtrl;
   late TextEditingController _urlCtrl;
   late TextEditingController _keyCtrl;
@@ -103,6 +108,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _loginError = e.toString();
     } finally {
       if (mounted) setState(() => _loggingIn = false);
+    }
+  }
+
+  Future<void> _openReadme() async {
+    final opened = await launchUrl(
+      _readmeUri,
+      mode: LaunchMode.externalApplication,
+    );
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open the CamControl README')),
+      );
     }
   }
 
@@ -382,6 +399,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           ],
+          const SizedBox(height: 32),
+          const Divider(),
+          const SizedBox(height: 12),
+          Text('CamControl', style: Theme.of(context).textTheme.titleMedium),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.menu_book_outlined),
+            title: const Text('README'),
+            subtitle: const Text('Setup, usage, and latest release details'),
+            trailing: const Icon(Icons.open_in_new),
+            onTap: _openReadme,
+          ),
         ],
       ),
     );
