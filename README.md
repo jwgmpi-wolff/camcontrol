@@ -26,6 +26,32 @@ Flutter app ---- HTTP ----> FastAPI gateway ---- SSH/RTSP ----> Cameras
 - The gateway can capture images, publish camera live-view pages, record video,
   report motion status, and route captures to configured storage.
 
+## Connection URLs
+
+Gateway and direct-camera profiles use different URLs:
+
+- **Gateway mode:** enter the FastAPI gateway URL, for example
+  `http://192.168.1.20:8080`. Port `8080` is the gateway API port; it is not the
+  camera live-view address.
+- **Direct-camera mode:** enter the camera address or its complete live-view
+  URL, for example `192.168.1.50` or `http://192.168.1.50/live.html`.
+
+To view a camera directly in a browser, open:
+
+```text
+http://<camera-address>/live.html
+```
+
+The app retrieves refreshed images from:
+
+```text
+http://<camera-address>/live.jpg?t=<timestamp>
+```
+
+The query parameter prevents a browser or proxy from returning a cached image.
+If the camera web server is exposed on a non-default port, include that port
+before the path, for example `http://camera.example.net:8081/live.html`.
+
 ## Run The Gateway On Windows
 
 Prerequisites: Python 3.10 or newer and Git.
