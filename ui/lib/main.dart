@@ -41,6 +41,11 @@ class AppState extends ChangeNotifier {
   String get token => profiles.isEmpty ? '' : activeProfile.token;
   String get username => profiles.isEmpty ? '' : activeProfile.username;
 
+  /// True when the active profile connects straight to a camera's own IP,
+  /// bypassing the camera_bridge gateway entirely.
+  bool get isDirectMode => profiles.isNotEmpty && activeProfile.isDirect;
+  String get directHost => profiles.isEmpty ? '' : activeProfile.directHost;
+
   /// 0 means "use each camera's own recommended interval".
   int get pollIntervalSeconds => _pollIntervalSeconds;
 
@@ -130,6 +135,13 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> refreshCameras() async {
+    if (isDirectMode) {
+      // No gateway to poll -- the direct camera view fetches its own frames.
+      status = 'ok';
+      cameras = [];
+      notifyListeners();
+      return;
+    }
     try {
       await api.health();
       cameras = await api.listCameras();
@@ -172,24 +184,35 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   int _index = 0;
 
-  static const _screens = [
+  static const _cameraScreens = [
     MultiViewScreen(),
     MediaBrowserScreen(),
     SettingsScreen(),
   ];
-  static const _labels = ['Cameras', 'Media', 'Settings'];
-  static const _icons = [Icons.grid_view, Icons.video_library, Icons.settings];
+  static const _cameraLabels = ['Cameras', 'Media', 'Settings'];
+  static const _cameraIcons = [Icons.grid_view, Icons.video_library, Icons.settings];
+
+  // Direct mode has no gateway, so there's no media library to browse.
+  static const _directScreens = [MultiViewScreen(), SettingsScreen()];
+  static const _directLabels = ['Camera', 'Settings'];
+  static const _directIcons = [Icons.videocam, Icons.settings];
 
   @override
   Widget build(BuildContext context) {
+    final isDirect = context.watch<AppState>().isDirectMode;
+    final screens = isDirect ? _directScreens : _cameraScreens;
+    final labels = isDirect ? _directLabels : _cameraLabels;
+    final icons = isDirect ? _directIcons : _cameraIcons;
+    final index = _index < screens.length ? _index : 0;
+
     return Scaffold(
-      body: _screens[_index],
+      body: screens[index],
       bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
+        selectedIndex: index,
         onDestinationSelected: (i) => setState(() => _index = i),
         destinations: [
-          for (var i = 0; i < _labels.length; i++)
-            NavigationDestination(icon: Icon(_icons[i]), label: _labels[i]),
+          for (var i = 0; i < labels.length; i++)
+            NavigationDestination(icon: Icon(icons[i]), label: labels[i]),
         ],
       ),
     );

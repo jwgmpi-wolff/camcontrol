@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../main.dart';
 import 'camera_tile.dart';
+import 'direct_camera_view.dart';
 
 /// Grid of live-updating tiles, one per configured camera.
 class MultiViewScreen extends StatelessWidget {
@@ -18,6 +19,8 @@ class MultiViewScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
+
+    if (state.isDirectMode) return const DirectCameraView();
 
     return Scaffold(
       appBar: AppBar(

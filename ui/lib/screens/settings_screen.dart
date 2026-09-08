@@ -19,12 +19,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late TextEditingController _urlCtrl;
   late TextEditingController _keyCtrl;
   late TextEditingController _userCtrl;
+  late TextEditingController _hostCtrl;
   final _passCtrl = TextEditingController();
   bool _obscureKey = true;
   bool _obscurePass = true;
   bool _saved = false;
   bool _loggingIn = false;
   String? _loginError;
+  String _mode = 'gateway';
 
   @override
   void initState() {
@@ -38,6 +40,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _urlCtrl = TextEditingController(text: profile.baseUrl);
     _keyCtrl = TextEditingController(text: profile.apiKey);
     _userCtrl = TextEditingController(text: profile.username);
+    _hostCtrl = TextEditingController(text: profile.directHost);
+    _mode = profile.mode;
   }
 
   @override
@@ -46,6 +50,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _urlCtrl.dispose();
     _keyCtrl.dispose();
     _userCtrl.dispose();
+    _hostCtrl.dispose();
     _passCtrl.dispose();
     super.dispose();
   }
@@ -54,11 +59,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final state = context.read<AppState>();
     await state.saveProfile(
       GatewayProfile(
-        name: _nameCtrl.text.trim().isEmpty ? 'Gateway' : _nameCtrl.text.trim(),
+        name: _nameCtrl.text.trim().isEmpty
+            ? (_mode == 'direct' ? 'Camera' : 'Gateway')
+            : _nameCtrl.text.trim(),
         baseUrl: _urlCtrl.text.trim(),
         apiKey: _keyCtrl.text.trim(),
         username: state.activeProfile.username,
         token: state.activeProfile.token,
+        mode: _mode,
+        directHost: _hostCtrl.text.trim(),
       ),
       index: state.activeProfileIndex,
     );
@@ -70,6 +79,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _addProfile(String name, String baseUrl) async {
     final state = context.read<AppState>();
     await state.saveProfile(GatewayProfile(name: name, baseUrl: baseUrl));
+    await state.selectProfile(state.profiles.length - 1);
+    setState(_loadFromActiveProfile);
+  }
+
+  Future<void> _addDirectProfile() async {
+    final state = context.read<AppState>();
+    await state.saveProfile(
+      GatewayProfile(name: 'Direct camera', baseUrl: '', mode: 'direct'),
+    );
     await state.selectProfile(state.profiles.length - 1);
     setState(_loadFromActiveProfile);
   }
@@ -100,7 +118,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          Text('Gateway connection',
+          Text('Connection',
               style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 12),
           DropdownButton<int>(
@@ -132,6 +150,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   'https://<your-app>.azurewebsites.net',
                 ),
               ),
+              TextButton.icon(
+                icon: const Icon(Icons.videocam_outlined),
+                label: const Text('Add Direct camera'),
+                onPressed: _addDirectProfile,
+              ),
               if (state.profiles.length > 1)
                 IconButton(
                   icon: const Icon(Icons.delete_outline),
@@ -153,40 +176,75 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          TextField(
-            controller: _urlCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Gateway URL',
-              hintText: 'http://192.168.1.x:8080',
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.link),
-            ),
-            keyboardType: TextInputType.url,
-            autocorrect: false,
+          SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(
+                value: 'gateway',
+                label: Text('Gateway'),
+                icon: Icon(Icons.dns_outlined),
+              ),
+              ButtonSegment(
+                value: 'direct',
+                label: Text('Direct camera'),
+                icon: Icon(Icons.videocam_outlined),
+              ),
+            ],
+            selected: {_mode},
+            onSelectionChanged: (s) => setState(() => _mode = s.first),
           ),
           const SizedBox(height: 16),
-          TextField(
-            controller: _keyCtrl,
-            obscureText: _obscureKey,
-            decoration: InputDecoration(
-              labelText: 'API Key (legacy, optional)',
-              hintText: 'Only needed for admin-only endpoints',
-              border: const OutlineInputBorder(),
-              prefixIcon: const Icon(Icons.key),
-              suffixIcon: IconButton(
-                icon: Icon(
-                    _obscureKey ? Icons.visibility : Icons.visibility_off),
-                onPressed: () => setState(() => _obscureKey = !_obscureKey),
+          if (_mode == 'gateway') ...[
+            TextField(
+              controller: _urlCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Gateway URL',
+                hintText: 'http://192.168.1.x:8080',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.link),
               ),
+              keyboardType: TextInputType.url,
+              autocorrect: false,
             ),
-            autocorrect: false,
-          ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _keyCtrl,
+              obscureText: _obscureKey,
+              decoration: InputDecoration(
+                labelText: 'API Key (legacy, optional)',
+                hintText: 'Only needed for admin-only endpoints',
+                border: const OutlineInputBorder(),
+                prefixIcon: const Icon(Icons.key),
+                suffixIcon: IconButton(
+                  icon: Icon(
+                      _obscureKey ? Icons.visibility : Icons.visibility_off),
+                  onPressed: () => setState(() => _obscureKey = !_obscureKey),
+                ),
+              ),
+              autocorrect: false,
+            ),
+          ] else ...[
+            TextField(
+              controller: _hostCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Camera address (IP or DDNS)',
+                hintText: '192.168.1.50 or myhome.duckdns.org:8080',
+                helperText: 'Talks straight to the camera\'s own live view '
+                    'page -- no gateway needed. Works with a port-forwarded '
+                    'public address too.',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.videocam_outlined),
+              ),
+              keyboardType: TextInputType.url,
+              autocorrect: false,
+            ),
+          ],
           const SizedBox(height: 24),
           FilledButton.icon(
             icon: Icon(_saved ? Icons.check : Icons.save),
-            label: Text(_saved ? 'Saved' : 'Save gateway'),
+            label: Text(_saved ? 'Saved' : 'Save'),
             onPressed: _saveProfile,
           ),
+          if (_mode == 'gateway') ...[
           const SizedBox(height: 32),
           const Divider(),
           const SizedBox(height: 12),
@@ -245,6 +303,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onPressed: _loggingIn ? null : _login,
             ),
           ],
+          ],
           const SizedBox(height: 32),
           const Divider(),
           const SizedBox(height: 12),
@@ -266,6 +325,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 : '${state.pollIntervalSeconds}s',
             onChanged: (v) => state.setPollIntervalSeconds(v.round()),
           ),
+          if (_mode == 'gateway') ...[
           const SizedBox(height: 32),
           const Divider(),
           const SizedBox(height: 12),
@@ -333,6 +393,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               MaterialPageRoute(builder: (_) => const StorageSettingsScreen()),
             ),
           ),
+          ],
         ],
       ),
     );
