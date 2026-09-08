@@ -28,6 +28,10 @@ class LiveViewConfig(BaseModel):
 
     enabled: bool = False
     poll_interval_seconds: float = 3.0
+    # Optional DDNS hostname/public IP (with port, if port-forwarded to
+    # something other than 80) for viewing the feed from outside the LAN,
+    # e.g. "myhome.duckdns.org:8080". Blank = use the LAN host/IP.
+    public_url: str = ""
 
 
 class Hi3518eSshCameraConfig(BaseModel):

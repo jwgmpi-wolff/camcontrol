@@ -153,6 +153,15 @@ class ApiService {
     return jsonDecode(res.body) as Map<String, dynamic>;
   }
 
+  Future<Map<String, dynamic>> getLiveViewStatus(String cameraId) async {
+    final res = await http.get(
+      _uri('/api/cameras/$cameraId/live_view'),
+      headers: _headers,
+    );
+    _check(res);
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
   Future<Map<String, dynamic>> getConfig() async {
     final res = await http.get(_uri('/api/config'), headers: _headers);
     _check(res);

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../main.dart';
 import '../models/camera.dart';
@@ -42,6 +43,7 @@ class _CameraEditScreenState extends State<CameraEditScreen> {
   final _rtspUrlCtrl = TextEditingController();
   bool _liveViewEnabled = false;
   final _liveViewIntervalCtrl = TextEditingController(text: '3');
+  final _liveViewPublicUrlCtrl = TextEditingController();
   Map<String, dynamic>? _existingMotion;
 
   List<Map<String, dynamic>> _allCameras = [];
@@ -78,6 +80,8 @@ class _CameraEditScreenState extends State<CameraEditScreen> {
             _liveViewEnabled = liveView?['enabled'] as bool? ?? false;
             _liveViewIntervalCtrl.text =
                 '${liveView?['poll_interval_seconds'] ?? 3}';
+            _liveViewPublicUrlCtrl.text =
+                liveView?['public_url'] as String? ?? '';
           } else {
             _rtspUrlCtrl.text = match['rtsp_url'] as String? ?? '';
           }
@@ -109,6 +113,7 @@ class _CameraEditScreenState extends State<CameraEditScreen> {
     _remoteMediaCtrl.dispose();
     _rtspUrlCtrl.dispose();
     _liveViewIntervalCtrl.dispose();
+    _liveViewPublicUrlCtrl.dispose();
     super.dispose();
   }
 
@@ -141,6 +146,7 @@ class _CameraEditScreenState extends State<CameraEditScreen> {
           'enabled': _liveViewEnabled,
           'poll_interval_seconds':
               double.tryParse(_liveViewIntervalCtrl.text.trim()) ?? 3.0,
+          'public_url': _liveViewPublicUrlCtrl.text.trim(),
         },
       };
     }
@@ -345,7 +351,52 @@ class _CameraEditScreenState extends State<CameraEditScreen> {
         ),
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
       ),
+      const SizedBox(height: 12),
+      TextFormField(
+        controller: _liveViewPublicUrlCtrl,
+        enabled: _liveViewEnabled,
+        decoration: const InputDecoration(
+          labelText: 'Public URL / DDNS (optional)',
+          hintText: 'myhome.duckdns.org:8080',
+          helperText: 'For viewing over the internet via a port-forwarded '
+              'router. Leave blank to use the LAN IP.',
+          border: OutlineInputBorder(),
+        ),
+        keyboardType: TextInputType.url,
+        autocorrect: false,
+      ),
+      if (widget.existing != null) ...[
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
+          icon: const Icon(Icons.open_in_new),
+          label: const Text('View live feed'),
+          onPressed: () => _openLiveView(widget.existing!.id),
+        ),
+      ],
     ];
+  }
+
+  Future<void> _openLiveView(String cameraId) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final status =
+          await context.read<AppState>().api.getLiveViewStatus(cameraId);
+      final url = status['url'] as String?;
+      if (url == null) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Live view is not enabled for this camera')),
+        );
+        return;
+      }
+      final uri = Uri.parse(url);
+      final launched =
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!launched) {
+        messenger.showSnackBar(SnackBar(content: Text('Could not open $url')));
+      }
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Failed: $e')));
+    }
   }
 
   List<Widget> _buildRtspFields() {

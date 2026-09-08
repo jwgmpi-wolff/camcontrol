@@ -256,7 +256,12 @@ def get_live_view_status(
         if camera.id != camera_id or not isinstance(camera, Hi3518eSshCameraConfig):
             continue
         publisher = state._live_view_publishers.get(camera_id)
-        url = f"http://{camera.host}/live.html" if camera.live_view.enabled else None
+        host = camera.live_view.public_url.strip() or camera.host
+        for prefix in ("http://", "https://"):
+            if host.startswith(prefix):
+                host = host[len(prefix) :]
+        host = host.rstrip("/")
+        url = f"http://{host}/live.html" if camera.live_view.enabled else None
         return LiveViewStatus(
             camera_id=camera_id,
             enabled=camera.live_view.enabled,
