@@ -2,11 +2,14 @@
 custom firmware build (SD-card-flashed, no vendor cloud dependency).
 
 This firmware has no RTSP/ONVIF server, but its stock ISP pipeline keeps a
-live JPEG preview frame embedded inside a fixed-size memory-mapped buffer at
-/tmp/view. There is no documented offset table for it, so each pull scans the
-raw bytes for a JPEG SOI/EOI pair. The file is read over an SSH exec channel
-(`cat <path>`) rather than SFTP/SCP, because this firmware does not ship an
-sftp-server binary.
+live preview feed in a fixed-size memory-mapped buffer at /tmp/view. Despite
+the vendor's own naming/docs implying this is a JPEG frame, it is actually a
+raw H.264 elementary stream ring buffer (confirmed: zero JPEG SOI markers vs.
+hundreds of H.264 NAL start codes, shared via mmap between the ISP encoder
+and the local rmm/mp4record processes) -- so each pull decodes one frame out
+of it with ffmpeg rather than scanning for JPEG markers. The file is read
+over an SSH exec channel (`cat <path>`) rather than SFTP/SCP, because this
+firmware does not ship an sftp-server binary.
 """
 
 from __future__ import annotations
@@ -19,17 +22,16 @@ from collections.abc import Iterator
 
 import paramiko
 
-from ..jpeg_extract import extract_jpeg
+from ..h264_snapshot import H264DecodeError, decode_h264_to_jpeg
 from ..models import Hi3518eSshCameraConfig
 from .base import CaptureBackend, CaptureError
 from .media_browser import MediaBrowser, MediaFile, guess_media_type
 
-# /tmp/view is a live, non-double-buffered mmap region the ISP pipeline
-# overwrites in place only occasionally (observed: stable/identical content
-# across repeated reads once populated, torn only during the brief write
-# itself). A short retry budget rides out that write window without making
-# every poll expensive; callers should treat an eventual failure as "no new
-# frame yet" and keep showing the last successful frame, not a hard error.
+# /tmp/view is a live, actively-written mmap ring buffer (see module
+# docstring); most single reads land mid-write or between the parameter
+# sets a decoder needs, so ffmpeg only manages to decode a real frame out of
+# some fraction of reads. A short retry budget rides out that instead of
+# treating one bad read as a hard failure.
 _SNAPSHOT_RETRY_ATTEMPTS = 6
 _SNAPSHOT_RETRY_DELAY_SECONDS = 0.3
 _SNAPSHOT_READ_TIMEOUT_SECONDS = 20
@@ -108,13 +110,13 @@ class Hi3518eSshCapture(CaptureBackend, MediaBrowser):
                     f"{self._config.host}: {err.decode(errors='replace')}"
                 )
 
-            jpeg = extract_jpeg(data)
-            if jpeg is None:
+            try:
+                return decode_h264_to_jpeg(data)
+            except H264DecodeError as exc:
                 raise CaptureError(
-                    f"No JPEG frame found in {self._config.remote_view_path} "
-                    f"on {self._config.host}"
-                )
-            return jpeg
+                    f"No decodable frame in {self._config.remote_view_path} "
+                    f"on {self._config.host}: {exc}"
+                ) from exc
 
     def list_media(self) -> list[MediaFile]:
         remote_dir = self._config.remote_media_dir

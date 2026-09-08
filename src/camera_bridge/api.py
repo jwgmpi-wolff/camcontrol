@@ -16,7 +16,8 @@ from .capture.media_browser import MediaBrowser, MediaFile, guess_media_type
 from .capture.registry import build_capture_backend
 from .config import DEFAULT_CONFIG_PATH, load_config, save_config
 from .discovery import DiscoveredCamera, scan_network
-from .models import AppConfig, CameraConfig, StorageConfig
+from .live_view_publisher import LiveViewPublisher
+from .models import AppConfig, CameraConfig, Hi3518eSshCameraConfig, StorageConfig
 from .motion import MotionWatcher
 from .recording import RecordingSession
 from .storage.base import StorageBackend, StorageError
@@ -33,6 +34,7 @@ class _GatewayState:
         self._storage_backend: StorageBackend | None = None
         self._motion_watchers: dict[str, MotionWatcher] = {}
         self._recording_sessions: dict[str, RecordingSession] = {}
+        self._live_view_publishers: dict[str, LiveViewPublisher] = {}
         self.users = UserStore(DEFAULT_USERS_PATH)
         self.tokens = TokenManager()
 
@@ -81,8 +83,29 @@ class _GatewayState:
             watcher.stop()
         self._motion_watchers.clear()
 
+    def start_live_view_publishers(self) -> None:
+        for camera in self.config.cameras:
+            if not isinstance(camera, Hi3518eSshCameraConfig):
+                continue
+            if not camera.live_view.enabled:
+                continue
+            publisher = LiveViewPublisher(
+                camera_id=camera.id,
+                config=camera,
+                backend=self.capture_backend_for(camera.id),
+                poll_interval_seconds=camera.live_view.poll_interval_seconds,
+            )
+            publisher.start()
+            self._live_view_publishers[camera.id] = publisher
+
+    def stop_live_view_publishers(self) -> None:
+        for publisher in self._live_view_publishers.values():
+            publisher.stop()
+        self._live_view_publishers.clear()
+
     def reload(self, config: AppConfig) -> None:
         self.stop_motion_watchers()
+        self.stop_live_view_publishers()
         for session in self._recording_sessions.values():
             session.stop()
         self._recording_sessions.clear()
@@ -91,6 +114,7 @@ class _GatewayState:
         self._storage_backend = None
         save_config(config, self.config_path)
         self.start_motion_watchers()
+        self.start_live_view_publishers()
 
 
 state = _GatewayState()
@@ -99,11 +123,13 @@ state = _GatewayState()
 @app.on_event("startup")
 def _start_motion_watchers() -> None:
     state.start_motion_watchers()
+    state.start_live_view_publishers()
 
 
 @app.on_event("shutdown")
 def _stop_motion_watchers() -> None:
     state.stop_motion_watchers()
+    state.stop_live_view_publishers()
 
 
 def _require_api_key(x_api_key: str | None = Header(default=None)) -> None:
@@ -155,6 +181,13 @@ class RecordingStatus(BaseModel):
     camera_id: str
     active: bool
     session_id: str | None
+
+
+class LiveViewStatus(BaseModel):
+    camera_id: str
+    enabled: bool
+    last_push_ok: bool
+    url: str | None
 
 
 class LoginRequest(BaseModel):
@@ -212,6 +245,24 @@ def get_motion_status(camera_id: str, _: None = Depends(_require_api_key)) -> Mo
                 last_score=watcher.last_score if watcher else 0.0,
                 motion_active=watcher.motion_active if watcher else False,
             )
+    raise HTTPException(status_code=404, detail=f"Unknown camera id: {camera_id}")
+
+
+@app.get("/api/cameras/{camera_id}/live_view", response_model=LiveViewStatus)
+def get_live_view_status(
+    camera_id: str, _: str = Depends(_require_auth)
+) -> LiveViewStatus:
+    for camera in state.config.cameras:
+        if camera.id != camera_id or not isinstance(camera, Hi3518eSshCameraConfig):
+            continue
+        publisher = state._live_view_publishers.get(camera_id)
+        url = f"http://{camera.host}/live.html" if camera.live_view.enabled else None
+        return LiveViewStatus(
+            camera_id=camera_id,
+            enabled=camera.live_view.enabled,
+            last_push_ok=publisher.last_push_ok if publisher else False,
+            url=url,
+        )
     raise HTTPException(status_code=404, detail=f"Unknown camera id: {camera_id}")
 
 

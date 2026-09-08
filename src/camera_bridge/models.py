@@ -21,6 +21,15 @@ class MotionConfig(BaseModel):
     cooldown_seconds: float = 15.0
 
 
+class LiveViewConfig(BaseModel):
+    """Publishes a periodically-refreshed snapshot directly onto the
+    camera's own web server, so it's viewable at http://<camera-ip>/live.html
+    without going through the gateway. Off by default (opt-in per camera)."""
+
+    enabled: bool = False
+    poll_interval_seconds: float = 5.0
+
+
 class Hi3518eSshCameraConfig(BaseModel):
     """Connection details for a Hi3518e-family camera running third-party
     custom firmware, reachable over SSH."""
@@ -35,6 +44,7 @@ class Hi3518eSshCameraConfig(BaseModel):
     remote_view_path: str = "/tmp/view"
     remote_media_dir: str = "/tmp/sd"
     motion: MotionConfig = Field(default_factory=MotionConfig)
+    live_view: LiveViewConfig = Field(default_factory=LiveViewConfig)
 
 
 class RtspCameraConfig(BaseModel):

@@ -118,7 +118,7 @@ class _CameraTileState extends State<CameraTile> with WidgetsBindingObserver {
   // reliable live-view mechanism at all -- treat "no frame available yet" as
   // an expected soft state, not a connectivity failure.
   bool get _isLiveViewUnavailable =>
-      _error?.contains('No JPEG frame found') ?? false;
+      _error?.contains('No decodable frame') ?? false;
 
   @override
   Widget build(BuildContext context) {
