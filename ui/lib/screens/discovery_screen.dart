@@ -100,7 +100,7 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
             MaterialPageRoute(
               builder: (_) => CameraEditScreen(
                 prefillType: result.suggestedType == 'unknown'
-                    ? 'yi_hack_v3_ssh'
+                    ? 'hi3518e_ssh'
                     : result.suggestedType,
                 prefillHost: result.ip,
               ),

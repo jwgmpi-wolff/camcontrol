@@ -4,8 +4,8 @@ from camera_bridge.config import load_config, save_config
 from camera_bridge.models import (
     AppConfig,
     AzureBlobStorageConfig,
+    Hi3518eSshCameraConfig,
     LocalStorageConfig,
-    YiHackV3SshCameraConfig,
 )
 
 
@@ -20,7 +20,7 @@ def test_save_and_load_config_roundtrip(tmp_path: Path):
     path = tmp_path / "cameras.json"
     original = AppConfig(
         cameras=[
-            YiHackV3SshCameraConfig(
+            Hi3518eSshCameraConfig(
                 id="cam-1", name="Front Yard", host="10.0.0.246", password=""
             )
         ],

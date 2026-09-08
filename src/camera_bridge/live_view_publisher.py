@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 _REMOTE_WWW_DIR = "/home/yi-hack-v3/www"
 _REMOTE_IMAGE_PATH = f"{_REMOTE_WWW_DIR}/live.jpg"
 _REMOTE_PAGE_PATH = f"{_REMOTE_WWW_DIR}/live.html"
+_HTTPD_STALE_CONNECTION_LIMIT = 20
 
 _LIVE_HTML_TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
@@ -55,6 +56,23 @@ def _render_live_html(refresh_interval_seconds: float) -> str:
         return _LIVE_HTML_TEMPLATE.replace(
                 "__REFRESH_INTERVAL_MS__", str(refresh_interval_ms)
         )
+
+
+def _httpd_health_command(stale_connection_limit: int) -> str:
+    return (
+        "stale=$(netstat -ant 2>/dev/null | "
+        "awk '$4 ~ /:80$/ && $6 == \"CLOSE_WAIT\" {count++} "
+        "END {print count+0}'); "
+        f'if [ "$stale" -ge {stale_connection_limit} ]; then '
+        "for p in $(ps | awk '$4 == \"lwsws\" {print $1}'); do "
+        'kill -9 "$p"; done; '
+        "rm -f /tmp/.lwsts-lock; "
+        "export LD_LIBRARY_PATH=/home/lib:/home/yi-hack-v3/lib:"
+        "/tmp/sd/yi-hack-v3/lib; "
+        "export PATH=$PATH:/home/base/tools:/home/yi-hack-v3/bin:"
+        "/home/yi-hack-v3/sbin; "
+        "cd /tmp; lwsws -D; fi"
+    )
 
 
 class LiveViewPublisher:
@@ -137,6 +155,11 @@ class LiveViewPublisher:
             stdout.channel.settimeout(15)
             _stdin.write(jpeg)
             _stdin.channel.shutdown_write()
+            stdout.read()
+            _stdin, stdout, _stderr = client.exec_command(
+                _httpd_health_command(_HTTPD_STALE_CONNECTION_LIMIT), timeout=15
+            )
+            stdout.channel.settimeout(15)
             stdout.read()
         finally:
             client.close()

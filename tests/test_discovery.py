@@ -11,7 +11,7 @@ async def test_scan_network_aggregates_open_ports_and_fingerprint(monkeypatch):
         return ip == "10.0.0.5" and port in (22, 80)
 
     async def fake_fingerprint_http(ip: str):
-        return "yi_hack_v3_ssh", "yi-hack-v3 about.html signature"
+        return "hi3518e_ssh", "third-party firmware about.html signature"
 
     monkeypatch.setattr(discovery, "_probe_port", fake_probe_port)
     monkeypatch.setattr(discovery, "_fingerprint_http", fake_fingerprint_http)
@@ -23,7 +23,7 @@ async def test_scan_network_aggregates_open_ports_and_fingerprint(monkeypatch):
     found = results[0]
     assert found.ip == "10.0.0.5"
     assert found.open_ports == [22, 80]
-    assert found.suggested_type == "yi_hack_v3_ssh"
+    assert found.suggested_type == "hi3518e_ssh"
 
 
 @pytest.mark.asyncio

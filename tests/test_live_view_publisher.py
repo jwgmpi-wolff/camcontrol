@@ -6,7 +6,11 @@ from __future__ import annotations
 import time
 
 from camera_bridge.capture.base import CaptureBackend, CaptureError
-from camera_bridge.live_view_publisher import LiveViewPublisher, _render_live_html
+from camera_bridge.live_view_publisher import (
+    LiveViewPublisher,
+    _httpd_health_command,
+    _render_live_html,
+)
 from camera_bridge.models import Hi3518eSshCameraConfig
 
 
@@ -29,6 +33,16 @@ def test_live_page_uses_subsecond_refresh_interval():
 
     assert "}, 500);" in html
     assert "__REFRESH_INTERVAL_MS__" not in html
+
+
+def test_httpd_health_command_restarts_after_stale_connection_limit():
+    command = _httpd_health_command(20)
+
+    assert '$6 == "CLOSE_WAIT"' in command
+    assert '[ "$stale" -ge 20 ]' in command
+    assert "awk '$4 == \"lwsws\" {print $1}'" in command
+    assert "rm -f /tmp/.lwsts-lock" in command
+    assert "lwsws -D" in command
 
 
 def test_live_view_publisher_start_stop_does_not_raise(monkeypatch):

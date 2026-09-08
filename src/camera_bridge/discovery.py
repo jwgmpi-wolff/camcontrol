@@ -21,7 +21,7 @@ _CONCURRENCY = 128
 class DiscoveredCamera(BaseModel):
     ip: str
     open_ports: list[int]
-    suggested_type: str  # "yi_hack_v3_ssh" | "rtsp" | "unknown"
+    suggested_type: str  # "hi3518e_ssh" | "rtsp" | "unknown"
     suggested_name: str
     fingerprint: str
 
@@ -54,16 +54,16 @@ async def _fingerprint_http(ip: str) -> tuple[str, str]:
     async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
         try:
             res = await client.get(f"http://{ip}/about.html")
-            if res.status_code == 200 and "yi-hack-v3" in res.text:
-                return "yi_hack_v3_ssh", "yi-hack-v3 about.html signature"
+            if res.status_code == 200 and "custom firmware" in res.text.lower():
+                return "hi3518e_ssh", "third-party firmware about.html signature"
         except Exception:  # noqa: BLE001
             pass
         try:
             res = await client.get(f"http://{ip}/")
             if res.status_code == 200:
                 text = res.text.lower()
-                if "yi-hack" in text or "software version informations" in text:
-                    return "unknown", "yi-hack-family HTTP page (unconfirmed variant)"
+                if "custom firmware" in text or "software version informations" in text:
+                    return "unknown", "third-party-firmware-family HTTP page (unconfirmed variant)"
                 return "unknown", "HTTP server present, unrecognized"
         except Exception:  # noqa: BLE001
             pass
@@ -85,7 +85,7 @@ async def _probe_host(ip: str, semaphore: asyncio.Semaphore) -> DiscoveredCamera
             suggested_type, fingerprint = await _fingerprint_http(ip)
         if suggested_type == "unknown" and 554 in open_ports:
             suggested_type = "rtsp"
-            fingerprint = "RTSP port open, no yi-hack-v3 HTTP signature"
+            fingerprint = "RTSP port open, no third-party firmware HTTP signature"
 
         return DiscoveredCamera(
             ip=ip,
