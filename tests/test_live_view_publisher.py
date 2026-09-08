@@ -6,7 +6,7 @@ from __future__ import annotations
 import time
 
 from camera_bridge.capture.base import CaptureBackend, CaptureError
-from camera_bridge.live_view_publisher import LiveViewPublisher
+from camera_bridge.live_view_publisher import LiveViewPublisher, _render_live_html
 from camera_bridge.models import Hi3518eSshCameraConfig
 
 
@@ -22,6 +22,13 @@ class _FakeCaptureBackend(CaptureBackend):
 class _FailingCaptureBackend(CaptureBackend):
     def get_snapshot(self) -> bytes:
         raise CaptureError("camera unreachable")
+
+
+def test_live_page_uses_subsecond_refresh_interval():
+    html = _render_live_html(0.5)
+
+    assert "}, 500);" in html
+    assert "__REFRESH_INTERVAL_MS__" not in html
 
 
 def test_live_view_publisher_start_stop_does_not_raise(monkeypatch):

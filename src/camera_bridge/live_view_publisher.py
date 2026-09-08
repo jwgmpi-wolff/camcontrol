@@ -25,7 +25,7 @@ _REMOTE_WWW_DIR = "/home/yi-hack-v3/www"
 _REMOTE_IMAGE_PATH = f"{_REMOTE_WWW_DIR}/live.jpg"
 _REMOTE_PAGE_PATH = f"{_REMOTE_WWW_DIR}/live.html"
 
-_LIVE_HTML = """<!DOCTYPE html>
+_LIVE_HTML_TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -43,11 +43,18 @@ _LIVE_HTML = """<!DOCTYPE html>
   var img = document.getElementById('frame');
   setInterval(function () {
     img.src = 'live.jpg?t=' + Date.now();
-  }, 3000);
+    }, __REFRESH_INTERVAL_MS__);
 </script>
 </body>
 </html>
 """
+
+
+def _render_live_html(refresh_interval_seconds: float) -> str:
+        refresh_interval_ms = max(1, round(refresh_interval_seconds * 1000))
+        return _LIVE_HTML_TEMPLATE.replace(
+                "__REFRESH_INTERVAL_MS__", str(refresh_interval_ms)
+        )
 
 
 class LiveViewPublisher:
@@ -111,7 +118,7 @@ class LiveViewPublisher:
                     f"cat > {_REMOTE_PAGE_PATH}", timeout=10
                 )
                 stdout.channel.settimeout(10)
-                _stdin.write(_LIVE_HTML.encode())
+                _stdin.write(_render_live_html(self._poll_interval).encode())
                 _stdin.channel.shutdown_write()
                 stdout.read()
             finally:
