@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:convert';
 
+import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -99,7 +101,7 @@ class AppState extends ChangeNotifier {
     }
     if (profiles.isEmpty) {
       // Migrate the old single baseUrl/apiKey prefs into a "Local" profile.
-      final legacyUrl = _prefs.getString('baseUrl') ?? 'http://192.168.1.x:8080';
+      final legacyUrl = _prefs.getString('baseUrl') ?? 'http://192.168.1.x:21416';
       final legacyKey = _prefs.getString('apiKey') ?? '';
       profiles = [GatewayProfile(name: 'Local', baseUrl: legacyUrl, apiKey: legacyKey)];
     }
@@ -141,7 +143,7 @@ class AppState extends ChangeNotifier {
     if (index < 0 || index >= profiles.length) return;
     profiles.removeAt(index);
     if (profiles.isEmpty) {
-      profiles = [GatewayProfile(name: 'Local', baseUrl: 'http://192.168.1.x:8080')];
+      profiles = [GatewayProfile(name: 'Local', baseUrl: 'http://192.168.1.x:21416')];
     }
     if (_activeIndex >= profiles.length) _activeIndex = 0;
     await _saveProfiles();
@@ -166,6 +168,24 @@ class AppState extends ChangeNotifier {
   Future<void> setPollIntervalSeconds(int seconds) async {
     _pollIntervalSeconds = seconds;
     await _prefs.setInt('pollIntervalSeconds', seconds);
+    notifyListeners();
+  }
+
+  // Stored on-device only (SharedPreferences) so a reconnect QR/manual entry
+  // is available if the home Wi-Fi network ever changes -- never sent to the
+  // gateway or over the network.
+  String get wifiSsid => _prefs.getString('wifiSsid') ?? '';
+  String get wifiPassword => _prefs.getString('wifiPassword') ?? '';
+  String get wifiSecurity => _prefs.getString('wifiSecurity') ?? 'WPA';
+
+  Future<void> setWifiCredentials({
+    required String ssid,
+    required String password,
+    required String security,
+  }) async {
+    await _prefs.setString('wifiSsid', ssid);
+    await _prefs.setString('wifiPassword', password);
+    await _prefs.setString('wifiSecurity', security);
     notifyListeners();
   }
 
@@ -218,6 +238,55 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   int _index = 0;
+  StreamSubscription<Uri>? _linkSub;
+
+  @override
+  void initState() {
+    super.initState();
+    _initDeepLinks();
+  }
+
+  Future<void> _initDeepLinks() async {
+    final appLinks = AppLinks();
+    try {
+      final initial = await appLinks.getInitialLink();
+      if (initial != null) _handleDeepLink(initial);
+    } catch (_) {
+      // No initial link (cold start without a deep link) -- nothing to do.
+    }
+    _linkSub = appLinks.uriLinkStream.listen(_handleDeepLink);
+  }
+
+  /// `camcontrol://configure?url=<gateway-url>&key=<api-key>&name=<profile-name>`
+  /// Provisions (or updates) a Gateway profile without the user typing it in.
+  void _handleDeepLink(Uri uri) {
+    if (!mounted) return;
+    if (uri.scheme != 'camcontrol' || uri.host != 'configure') return;
+    final url = uri.queryParameters['url'];
+    if (url == null || url.isEmpty) return;
+    final apiKey = uri.queryParameters['key'] ?? '';
+    final name = uri.queryParameters['name'] ?? 'Azure';
+    final state = context.read<AppState>();
+    final existingIndex =
+        state.profiles.indexWhere((p) => p.baseUrl == url && !p.isDirect);
+    state
+        .saveProfile(
+          GatewayProfile(name: name, baseUrl: url, apiKey: apiKey),
+          index: existingIndex == -1 ? null : existingIndex,
+        )
+        .then((_) => state.selectProfile(
+              existingIndex == -1 ? state.profiles.length - 1 : existingIndex,
+            ));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Configured gateway "$name" ($url)')),
+    );
+  }
+
+  @override
+  void dispose() {
+    _linkSub?.cancel();
+    super.dispose();
+  }
 
   static const _cameraScreens = [
     MultiViewScreen(),

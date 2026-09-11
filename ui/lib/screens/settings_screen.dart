@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../main.dart';
 import '../models/gateway_profile.dart';
+import '../utils/wifi_qr.dart';
+import '../utils/yi_hack_wifi_config.dart';
 import 'camera_edit_screen.dart';
 import 'discovery_screen.dart';
 import 'storage_settings_screen.dart';
@@ -32,10 +36,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String? _loginError;
   String _mode = 'gateway';
 
+  late TextEditingController _wifiSsidCtrl;
+  late TextEditingController _wifiPasswordCtrl;
+  String _wifiSecurity = 'WPA';
+  bool _obscureWifiPassword = true;
+  bool _wifiSaved = false;
+
   @override
   void initState() {
     super.initState();
     _loadFromActiveProfile();
+    final state = context.read<AppState>();
+    _wifiSsidCtrl = TextEditingController(text: state.wifiSsid);
+    _wifiPasswordCtrl = TextEditingController(text: state.wifiPassword);
+    _wifiSecurity = state.wifiSecurity;
   }
 
   void _loadFromActiveProfile() {
@@ -54,7 +68,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _keyCtrl.dispose();
     _userCtrl.dispose();
     _passCtrl.dispose();
+    _wifiSsidCtrl.dispose();
+    _wifiPasswordCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _saveWifiCredentials() async {
+    await context.read<AppState>().setWifiCredentials(
+          ssid: _wifiSsidCtrl.text.trim(),
+          password: _wifiPasswordCtrl.text,
+          security: _wifiSecurity,
+        );
+    setState(() => _wifiSaved = true);
+    await Future<void>.delayed(const Duration(seconds: 2));
+    if (mounted) setState(() => _wifiSaved = false);
+  }
+
+  Future<void> _copyToClipboard(String label, String value) async {
+    await Clipboard.setData(ClipboardData(text: value));
+    if (mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('$label copied')));
+    }
+  }
+
+  String get _yiHackWifiWarning {
+    final bad = {
+      ...unsupportedYiHackWifiChars(_wifiSsidCtrl.text.trim()),
+      ...unsupportedYiHackWifiChars(_wifiPasswordCtrl.text),
+    };
+    if (bad.isEmpty) return '';
+    return 'Contains characters not documented as supported by the SD-card '
+        'method: ${bad.join(' ')}';
   }
 
   Future<void> _saveProfile() async {
@@ -154,7 +199,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 icon: const Icon(Icons.add),
                 label: const Text('Add Local'),
                 onPressed: () =>
-                    _addProfile('Local', 'http://192.168.1.x:8080'),
+                    _addProfile('Local', 'http://192.168.1.x:21416'),
               ),
               TextButton.icon(
                 icon: const Icon(Icons.cloud_outlined),
@@ -212,7 +257,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               controller: _urlCtrl,
               decoration: const InputDecoration(
                 labelText: 'Gateway URL',
-                hintText: 'http://192.168.1.x:8080',
+                hintText: 'http://192.168.1.x:21416',
                 border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.link),
               ),
@@ -330,6 +375,161 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 : '${state.pollIntervalSeconds}s',
             onChanged: (v) => state.setPollIntervalSeconds(v.round()),
           ),
+          const SizedBox(height: 32),
+          const Divider(),
+          const SizedBox(height: 12),
+          Text('Wi-Fi reconnect', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          const Text(
+            'Save your home Wi-Fi network here so you always have a QR code '
+            '(or the credentials to type in by hand) if the network name or '
+            'password ever changes. Stored only on this device.',
+            style: TextStyle(fontSize: 12),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _wifiSsidCtrl,
+            decoration: const InputDecoration(
+              labelText: 'Network name (SSID)',
+              border: OutlineInputBorder(),
+              prefixIcon: Icon(Icons.wifi),
+            ),
+            autocorrect: false,
+            onChanged: (_) => setState(() {}),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _wifiPasswordCtrl,
+            obscureText: _obscureWifiPassword,
+            decoration: InputDecoration(
+              labelText: 'Password',
+              border: const OutlineInputBorder(),
+              prefixIcon: const Icon(Icons.lock_outline),
+              suffixIcon: IconButton(
+                icon: Icon(_obscureWifiPassword
+                    ? Icons.visibility
+                    : Icons.visibility_off),
+                onPressed: () =>
+                    setState(() => _obscureWifiPassword = !_obscureWifiPassword),
+              ),
+            ),
+            autocorrect: false,
+            onChanged: (_) => setState(() {}),
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            initialValue: _wifiSecurity,
+            decoration: const InputDecoration(
+              labelText: 'Security type',
+              border: OutlineInputBorder(),
+            ),
+            items: const [
+              DropdownMenuItem(value: 'WPA', child: Text('WPA/WPA2/WPA3')),
+              DropdownMenuItem(value: 'WEP', child: Text('WEP')),
+              DropdownMenuItem(value: 'nopass', child: Text('None (open network)')),
+            ],
+            onChanged: (v) => setState(() => _wifiSecurity = v ?? 'WPA'),
+          ),
+          const SizedBox(height: 12),
+          FilledButton.icon(
+            icon: Icon(_wifiSaved ? Icons.check : Icons.save),
+            label: Text(_wifiSaved ? 'Saved' : 'Save'),
+            onPressed: _saveWifiCredentials,
+          ),
+          if (_wifiSsidCtrl.text.trim().isNotEmpty) ...[
+            const SizedBox(height: 20),
+            Center(
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                color: Colors.white,
+                child: QrImageView(
+                  data: buildWifiQrPayload(
+                    ssid: _wifiSsidCtrl.text.trim(),
+                    password: _wifiPasswordCtrl.text,
+                    security: _wifiSecurity,
+                  ),
+                  size: 200,
+                  backgroundColor: Colors.white,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text('Scan with a phone camera to join the network.',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade400)),
+            const SizedBox(height: 12),
+            Text('Manual entry', style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 4),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              title: Text('Network: ${_wifiSsidCtrl.text.trim()}'),
+              trailing: IconButton(
+                icon: const Icon(Icons.copy, size: 18),
+                onPressed: () =>
+                    _copyToClipboard('Network name', _wifiSsidCtrl.text.trim()),
+              ),
+            ),
+            if (_wifiSecurity != 'nopass')
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                title: Text('Password: ${_wifiPasswordCtrl.text}'),
+                trailing: IconButton(
+                  icon: const Icon(Icons.copy, size: 18),
+                  onPressed: () =>
+                      _copyToClipboard('Password', _wifiPasswordCtrl.text),
+                ),
+              ),
+            const SizedBox(height: 20),
+            const Divider(),
+            const SizedBox(height: 8),
+            Text('Hacked camera SD-card recovery',
+                style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 4),
+            const Text(
+              'For the yi-hack custom firmware cameras (246/252): if Wi-Fi '
+              'changes, this text goes in configure_wifi.cfg alongside the '
+              'firmware\'s own configure_wifi.sh/startup.sh on the camera\'s '
+              'SD card (see that camera\'s SD-card recovery instructions). '
+              'Field format is the common yi-hack convention but hasn\'t '
+              'been verified against your exact firmware build -- confirm '
+              'before relying on it.',
+              style: TextStyle(fontSize: 12),
+            ),
+            if (_yiHackWifiWarning.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(_yiHackWifiWarning,
+                  style: const TextStyle(fontSize: 12, color: Colors.orange)),
+            ],
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey.shade700),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: SelectableText(
+                buildYiHackWifiConfig(
+                  ssid: _wifiSsidCtrl.text.trim(),
+                  password: _wifiPasswordCtrl.text,
+                ),
+                style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+              ),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              icon: const Icon(Icons.copy),
+              label: const Text('Copy configure_wifi.cfg text'),
+              onPressed: () => _copyToClipboard(
+                'configure_wifi.cfg contents',
+                buildYiHackWifiConfig(
+                  ssid: _wifiSsidCtrl.text.trim(),
+                  password: _wifiPasswordCtrl.text,
+                ),
+              ),
+            ),
+          ],
           if (_mode == 'gateway') ...[
           const SizedBox(height: 32),
           const Divider(),
