@@ -23,6 +23,7 @@ from collections.abc import Iterator
 import paramiko
 
 from ..h264_snapshot import H264DecodeError, decode_h264_to_jpeg
+from ..keyvault_secrets import resolve as resolve_secret
 from ..models import Hi3518eSshCameraConfig
 from .base import CaptureBackend, CaptureError
 from .media_browser import MediaBrowser, MediaFile, guess_media_type
@@ -53,7 +54,7 @@ class Hi3518eSshCapture(CaptureBackend, MediaBrowser):
             # Pass the literal string (including "") rather than None: this
             # firmware's dropbear expects a real (possibly blank) password
             # auth attempt, not paramiko's no-password/none-auth path.
-            password=self._config.password,
+            password=resolve_secret(self._config.password),
             timeout=10,
             banner_timeout=10,
             auth_timeout=10,

@@ -8,6 +8,7 @@ from __future__ import annotations
 import subprocess
 from urllib.parse import quote, urlsplit, urlunsplit
 
+from ..keyvault_secrets import resolve as resolve_secret
 from ..models import RtspCameraConfig
 from .base import CaptureBackend, CaptureError
 
@@ -20,9 +21,9 @@ def _effective_url(config: RtspCameraConfig) -> str:
     parts = urlsplit(config.rtsp_url)
     if "@" in parts.netloc:
         return config.rtsp_url
-    userinfo = quote(config.username, safe="")
+    userinfo = quote(resolve_secret(config.username), safe="")
     if config.password:
-        userinfo += f":{quote(config.password, safe='')}"
+        userinfo += f":{quote(resolve_secret(config.password), safe='')}"
     return urlunsplit((parts.scheme, f"{userinfo}@{parts.netloc}", parts.path, parts.query, parts.fragment))
 
 
