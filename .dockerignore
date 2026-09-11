@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+captures/
+streams/
+config/cameras.json
+config/users.json
+build_tmp/
+releases/
+ui/
+android/
+tests/
+.git/

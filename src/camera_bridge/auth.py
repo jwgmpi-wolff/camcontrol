@@ -14,6 +14,8 @@ import threading
 import time
 from pathlib import Path
 
+from .blob_config_sync import download_if_configured, upload_if_configured
+
 _PBKDF2_ITERATIONS = 200_000
 _TOKEN_TTL_SECONDS = 24 * 60 * 60
 
@@ -53,6 +55,7 @@ class UserStore:
         self._users: dict[str, str] = self._load()
 
     def _load(self) -> dict[str, str]:
+        download_if_configured(self._path)
         if not self._path.exists():
             return {}
         return json.loads(self._path.read_text(encoding="utf-8"))
@@ -60,6 +63,7 @@ class UserStore:
     def _save(self) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._path.write_text(json.dumps(self._users, indent=2), encoding="utf-8")
+        upload_if_configured(self._path)
 
     def is_empty(self) -> bool:
         with self._lock:

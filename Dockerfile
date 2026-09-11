@@ -1,40 +1,20 @@
-FROM python:3.12-slim AS base
+FROM python:3.12-slim
 
-# GStreamer RTSP server packages – only installed when the image targets Linux edge
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        gstreamer1.0-tools \
-        gstreamer1.0-plugins-base \
-        gstreamer1.0-plugins-good \
-        gstreamer1.0-plugins-bad \
-        gstreamer1.0-libav \
-        gstreamer1.0-rtsp \
-        libgstreamer1.0-dev \
-        libgstreamer-plugins-base1.0-dev \
-        python3-gi \
-        python3-gst-1.0 \
-        gir1.2-gst-rtsp-server-1.0 \
-        libgl1 \
-        libglib2.0-0 \
-        v4l-utils \
-        usbutils \
+# ffmpeg: required by the RTSP and Hi3518e H.264 snapshot capture backends.
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+COPY pyproject.toml ./
+COPY src ./src
+RUN pip install --no-cache-dir .
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# config/ is expected to be an Azure Files mount in App Service (persists
+# cameras.json/users.json across restarts and redeploys); captures/ is
+# unused on this target since storage is configured to the azure_blob
+# provider instead of local disk.
+ENV HOST=0.0.0.0
+ENV PORT=8000
+EXPOSE 8000
 
-COPY src/ ./src/
-
-# Snapshots are written here; mount a volume or Azure Blob Fuse at runtime
-RUN mkdir -p /data/snapshots
-
-ENV PYTHONPATH=/app/src \
-    PYTHONUNBUFFERED=1 \
-    SNAPSHOT_DIRECTORY=/data/snapshots \
-    STREAM_ENABLED=false \
-    LOG_LEVEL=INFO
-
-# The camera device must be passed at runtime: --device /dev/video0
-# Never embed IOTHUB_DEVICE_CONNECTION_STRING in the image
-ENTRYPOINT ["python", "-m", "camera_bridge.main"]
+CMD ["python", "-m", "camera_bridge.main"]
