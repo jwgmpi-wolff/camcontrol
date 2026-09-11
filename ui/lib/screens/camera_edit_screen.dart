@@ -41,6 +41,8 @@ class _CameraEditScreenState extends State<CameraEditScreen> {
   final _remoteViewCtrl = TextEditingController(text: '/tmp/view');
   final _remoteMediaCtrl = TextEditingController(text: '/tmp/sd');
   final _rtspUrlCtrl = TextEditingController();
+  final _rtspUsernameCtrl = TextEditingController();
+  final _rtspPasswordCtrl = TextEditingController();
   bool _liveViewEnabled = false;
   final _liveViewIntervalCtrl = TextEditingController(text: '3');
   final _liveViewPublicUrlCtrl = TextEditingController();
@@ -84,6 +86,7 @@ class _CameraEditScreenState extends State<CameraEditScreen> {
                 liveView?['public_url'] as String? ?? '';
           } else {
             _rtspUrlCtrl.text = match['rtsp_url'] as String? ?? '';
+            _rtspUsernameCtrl.text = match['username'] as String? ?? '';
           }
         }
       }
@@ -112,6 +115,8 @@ class _CameraEditScreenState extends State<CameraEditScreen> {
     _remoteViewCtrl.dispose();
     _remoteMediaCtrl.dispose();
     _rtspUrlCtrl.dispose();
+    _rtspUsernameCtrl.dispose();
+    _rtspPasswordCtrl.dispose();
     _liveViewIntervalCtrl.dispose();
     _liveViewPublicUrlCtrl.dispose();
     super.dispose();
@@ -150,11 +155,23 @@ class _CameraEditScreenState extends State<CameraEditScreen> {
         },
       };
     }
+    final existingRtspPassword = widget.existing != null
+        ? (_allCameras.firstWhere(
+              (c) => c['id'] == widget.existing!.id,
+              orElse: () => {},
+            )['password'] as String? ??
+            '')
+        : '';
     return {
       'type': 'rtsp',
       'id': _idCtrl.text.trim(),
       'name': _nameCtrl.text.trim(),
       'rtsp_url': _rtspUrlCtrl.text.trim(),
+      'username': _rtspUsernameCtrl.text.trim(),
+      // Blank means "keep existing", same rule as the SSH password field.
+      'password': _rtspPasswordCtrl.text.isNotEmpty
+          ? _rtspPasswordCtrl.text
+          : existingRtspPassword,
     };
   }
 
@@ -357,7 +374,7 @@ class _CameraEditScreenState extends State<CameraEditScreen> {
         enabled: _liveViewEnabled,
         decoration: const InputDecoration(
           labelText: 'Public URL / DDNS (optional)',
-          hintText: 'myhome.duckdns.org:8080',
+          hintText: 'myhome.duckdns.org:21416',
           helperText: 'For viewing over the internet via a port-forwarded '
               'router. Leave blank to use the LAN IP.',
           border: OutlineInputBorder(),
@@ -405,10 +422,30 @@ class _CameraEditScreenState extends State<CameraEditScreen> {
         controller: _rtspUrlCtrl,
         decoration: const InputDecoration(
           labelText: 'RTSP URL',
-          hintText: 'rtsp://user:pass@camera-ip/stream',
+          hintText: 'rtsp://camera-ip:port/stream',
+          helperText: 'Include a username/password here only if you don\'t '
+              'set them in the fields below.',
           border: OutlineInputBorder(),
         ),
         validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+      ),
+      const SizedBox(height: 12),
+      TextFormField(
+        controller: _rtspUsernameCtrl,
+        decoration: const InputDecoration(
+          labelText: 'Username (optional)',
+          border: OutlineInputBorder(),
+        ),
+      ),
+      const SizedBox(height: 12),
+      TextFormField(
+        controller: _rtspPasswordCtrl,
+        obscureText: true,
+        decoration: const InputDecoration(
+          labelText: 'Password (optional)',
+          hintText: 'Leave blank to keep the existing password unchanged',
+          border: OutlineInputBorder(),
+        ),
       ),
     ];
   }

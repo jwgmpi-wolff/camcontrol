@@ -30,7 +30,7 @@ class LiveViewConfig(BaseModel):
     poll_interval_seconds: float = 3.0
     # Optional DDNS hostname/public IP (with port, if port-forwarded to
     # something other than 80) for viewing the feed from outside the LAN,
-    # e.g. "myhome.duckdns.org:8080". Blank = use the LAN host/IP.
+    # e.g. "myhome.duckdns.org:21416". Blank = use the LAN host/IP.
     public_url: str = ""
 
 
@@ -58,6 +58,11 @@ class RtspCameraConfig(BaseModel):
     id: str
     name: str
     rtsp_url: str
+    # Optional: injected into rtsp_url at connect time (URL-encoded) so
+    # credentials don't have to be embedded/escaped in the URL by hand.
+    # Ignored if rtsp_url already has a userinfo section of its own.
+    username: str = ""
+    password: str = ""
     motion: MotionConfig = Field(default_factory=MotionConfig)
 
 
