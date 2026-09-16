@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import os
 import time
+import hashlib
+import hmac
 from datetime import datetime, timezone
 
 from fastapi import Depends, FastAPI, HTTPException, Header, Request, Response
@@ -22,6 +24,7 @@ from .capture.media_browser import MediaBrowser, MediaFile, guess_media_type
 from .capture.registry import build_capture_backend
 from .config import DEFAULT_CONFIG_PATH, load_config, save_config
 from .discovery import DiscoveredCamera, scan_network
+from .h264_snapshot import H264DecodeError, decode_h264_to_jpeg
 from .live_view_publisher import LiveViewPublisher
 from .models import AppConfig, CameraConfig, Hi3518eSshCameraConfig, StorageConfig
 from .motion import MotionWatcher
@@ -47,6 +50,7 @@ class _GatewayState:
         self._recording_sessions: dict[str, RecordingSession] = {}
         self._live_view_publishers: dict[str, LiveViewPublisher] = {}
         self.camera_announcements: dict[str, dict] = {}
+        self.pushed_snapshots: dict[str, bytes] = {}
         self.users = UserStore(DEFAULT_USERS_PATH)
         self.tokens = TokenManager()
 
@@ -168,6 +172,15 @@ def _require_auth(
     if expected and x_api_key == expected:
         return "api_key"
     raise HTTPException(status_code=401, detail="Invalid or missing credentials")
+
+
+def _require_camera_key(camera_id: str, camera_key: str | None) -> None:
+    master_key = os.environ.get("API_KEY", "")
+    expected = hmac.new(
+        master_key.encode(), camera_id.encode(), hashlib.sha256
+    ).hexdigest()
+    if not master_key or not camera_key or not hmac.compare_digest(camera_key, expected):
+        raise HTTPException(status_code=401, detail="Invalid camera credentials")
 
 
 class CameraSummary(BaseModel):
@@ -297,12 +310,38 @@ async def discover_cameras(_: str = Depends(_require_auth)) -> list[DiscoveredCa
 
 @app.get("/api/cameras/{camera_id}/snapshot")
 def get_snapshot(camera_id: str, _: str = Depends(_require_auth)) -> Response:
+    pushed = state.pushed_snapshots.get(camera_id)
+    if pushed is not None:
+        return Response(content=pushed, media_type="image/jpeg")
     backend = state.capture_backend_for(camera_id)
     try:
         jpeg = backend.get_snapshot()
     except CaptureError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     return Response(content=jpeg, media_type="image/jpeg")
+
+
+@app.post("/api/cameras/{camera_id}/push-snapshot")
+async def push_snapshot(
+    camera_id: str,
+    request: Request,
+    x_camera_key: str | None = Header(default=None),
+) -> dict:
+    """Accept a camera-originated H.264 preview buffer over HTTPS.
+
+    This supports cameras on private home LANs: they establish the outbound
+    connection, so Azure never needs to route to their RFC1918 address.
+    """
+    _require_camera_key(camera_id, x_camera_key)
+    state.capture_backend_for(camera_id)  # validates the configured camera ID
+    payload = await request.body()
+    if not payload or len(payload) > 8 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Invalid snapshot payload")
+    try:
+        state.pushed_snapshots[camera_id] = decode_h264_to_jpeg(payload)
+    except H264DecodeError as exc:
+        raise HTTPException(status_code=422, detail="No decodable camera frame") from exc
+    return {"status": "ok"}
 
 
 @app.post("/api/cameras/{camera_id}/capture", response_model=CaptureResult)
@@ -471,7 +510,8 @@ def _ssh_camera_or_404(camera_id: str) -> Hi3518eSshCameraConfig:
 
 @app.post("/api/cameras/announce")
 def announce_camera(
-    body: CameraAnnouncement, _: None = Depends(_require_api_key)
+    body: CameraAnnouncement,
+    x_camera_key: str | None = Header(default=None),
 ) -> dict:
     """Boot-time check-in from a camera running the on-camera package.
 
@@ -479,6 +519,7 @@ def announce_camera(
     that moved (new DHCP lease, new SSH port) be reached without the gateway
     having to rediscover it.
     """
+    _require_camera_key(body.camera_id, x_camera_key)
     camera = _ssh_camera_or_404(body.camera_id)
     state.camera_announcements[body.camera_id] = {
         "address": body.address,

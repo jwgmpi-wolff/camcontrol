@@ -103,8 +103,9 @@ cc_announce() {
     _body=$(printf '{"camera_id":"%s","address":"%s","ssh_port":%s}' \
         "$_id" "$_ip" "$_port")
     cc_tool wget -q -O /dev/null \
+        --no-check-certificate \
         --header="Content-Type: application/json" \
-        --header="X-API-Key: $_key" \
+        --header="X-Camera-Key: $_key" \
         --post-data="$_body" \
         "$_endpoint/api/cameras/announce" >/dev/null 2>&1
     if [ $? -eq 0 ]; then
@@ -112,6 +113,31 @@ cc_announce() {
     else
         cc_log "announce: gateway unreachable (non-fatal)"
     fi
+}
+
+cc_push_snapshots() {
+    _endpoint=$(cc_get api_endpoint "")
+    _key=$(cc_get api_key "")
+    _id=$(cc_get camera_id "")
+    _interval=$(cc_get push_interval_seconds 5)
+    case "$_interval" in ''|*[!0-9]*|0) return 0 ;; esac
+    [ -n "$_endpoint" ] && [ -n "$_key" ] && [ -n "$_id" ] || return 0
+    cc_has wget || { cc_log "push: no wget, skipping"; return 0; }
+
+    # The firmware updates /tmp/view continuously. Copying first avoids wget
+    # reading a moving mmap buffer for the entire HTTPS upload.
+    while :; do
+        cp /tmp/view /tmp/camcontrol-push.h264 2>/dev/null
+        if [ -s /tmp/camcontrol-push.h264 ]; then
+            cc_tool wget -q -O /dev/null \
+                --no-check-certificate \
+                --header="Content-Type: video/h264" \
+                --header="X-Camera-Key: $_key" \
+                --post-file=/tmp/camcontrol-push.h264 \
+                "$_endpoint/api/cameras/$_id/push-snapshot" >/dev/null 2>&1
+        fi
+        sleep "$_interval"
+    done
 }
 
 cc_apply_all() {
@@ -127,5 +153,6 @@ case "${1:-all}" in
     wifi) cc_apply_wifi_client ;;
     account) cc_apply_admin_account ;;
     announce) cc_announce ;;
+    push) cc_push_snapshots ;;
     *) cc_apply_all ;;
 esac

@@ -338,6 +338,16 @@ def test_settings_omit_untouched_fields():
     assert CameraProvisionSettings().to_config_entries() == {}
 
 
+def test_on_camera_payload_pushes_preview_after_wifi_connects():
+    apply = load_payload()["camcontrol-apply.sh"].decode()
+    boot = load_payload()["camcontrol-boot.sh"].decode()
+
+    assert "push-snapshot" in apply
+    assert "camcontrol-apply.sh\" push" in boot
+    assert apply.count("--no-check-certificate") == 2
+    assert apply.count("X-Camera-Key") == 2
+
+
 def test_probe_reports_capabilities_and_issues():
     client = _FakeSSHClient(
         {
