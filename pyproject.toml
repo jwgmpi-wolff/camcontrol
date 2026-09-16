@@ -26,5 +26,8 @@ dev = ["pytest>=8.0", "pytest-asyncio>=0.24"]
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+camera_bridge = ["oncam/*"]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
