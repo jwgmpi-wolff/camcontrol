@@ -38,6 +38,13 @@ class EntraAuthService {
 
   Future<String> accessToken() async {
     if (_client == null) await initialize();
+    final current = _result;
+    if (current != null &&
+        current.expiresOn.isAfter(
+          DateTime.now().add(const Duration(minutes: 1)),
+        )) {
+      return current.accessToken;
+    }
     try {
       _result = await _client!.acquireTokenSilent(scopes: _scopes);
     } on MsalException {
@@ -48,6 +55,11 @@ class EntraAuthService {
 
   Future<String> signIn() async {
     if (_client == null) await initialize();
+    try {
+      await _client!.signOut();
+    } on MsalException {
+      // There is no cached account to remove on a first-time sign-in.
+    }
     _result = await _client!.acquireToken(
       scopes: _scopes,
       prompt: Prompt.selectAccount,
