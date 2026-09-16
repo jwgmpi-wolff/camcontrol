@@ -95,6 +95,7 @@ class AppState extends ChangeNotifier {
   );
 
   String status = 'disconnected';
+  String? authenticationError;
   List<Camera> cameras = [];
 
   void _loadProfiles() {
@@ -217,10 +218,13 @@ class AppState extends ChangeNotifier {
       await api.health();
       cameras = await api.listCameras();
       status = 'ok';
+      authenticationError = null;
     } on ApiException catch (error) {
       status = error.status == 401 || error.status == 403
           ? 'authenticationRequired'
           : 'unreachable';
+      authenticationError =
+          error.status == 401 || error.status == 403 ? 'Gateway returned HTTP ${error.status}' : null;
       cameras = [];
     } catch (_) {
       status = 'unreachable';
@@ -377,7 +381,9 @@ class _MainShellState extends State<MainShell> {
       if (dialogContext.mounted && state.status != 'authenticationRequired') {
         Navigator.of(dialogContext).pop();
       } else if (dialogContext.mounted) {
-        setDialogState(() => setError('Authentication failed'));
+        setDialogState(() => setError(
+              state.authenticationError ?? 'Authentication failed',
+            ));
       }
     } catch (error) {
       if (dialogContext.mounted) {
