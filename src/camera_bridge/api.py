@@ -6,11 +6,17 @@ import os
 import time
 from datetime import datetime, timezone
 
-from fastapi import Depends, FastAPI, HTTPException, Header, Response
+from fastapi import Depends, FastAPI, HTTPException, Header, Request, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from .auth import DEFAULT_USERS_PATH, TokenManager, UserStore
+from .camera_provision import (
+    CameraProvisionError,
+    CameraProvisioner,
+    CameraProvisionSettings,
+    redact_config,
+)
 from .capture.base import CaptureBackend, CaptureError
 from .capture.media_browser import MediaBrowser, MediaFile, guess_media_type
 from .capture.registry import build_capture_backend
@@ -22,6 +28,11 @@ from .motion import MotionWatcher
 from .recording import RecordingSession
 from .storage.base import StorageBackend, StorageError
 from .storage.registry import build_storage_backend
+from .voice_message import (
+    MAX_VOICE_MESSAGE_BYTES,
+    VoiceMessageError,
+    VoiceMessagePlayer,
+)
 
 app = FastAPI(title="CamControl Gateway")
 
@@ -35,6 +46,7 @@ class _GatewayState:
         self._motion_watchers: dict[str, MotionWatcher] = {}
         self._recording_sessions: dict[str, RecordingSession] = {}
         self._live_view_publishers: dict[str, LiveViewPublisher] = {}
+        self.camera_announcements: dict[str, dict] = {}
         self.users = UserStore(DEFAULT_USERS_PATH)
         self.tokens = TokenManager()
 
@@ -141,16 +153,17 @@ def _require_api_key(x_api_key: str | None = Header(default=None)) -> None:
 
 
 def _require_auth(
-    authorization: str | None = Header(default=None),
+    entra_principal_id: str | None = Header(
+        default=None, alias="X-MS-CLIENT-PRINCIPAL-ID"
+    ),
+    entra_principal_name: str | None = Header(
+        default=None, alias="X-MS-CLIENT-PRINCIPAL-NAME"
+    ),
     x_api_key: str | None = Header(default=None),
 ) -> str:
-    """Video/image access gate: a valid bearer token from /api/auth/login,
-    or (fallback) the legacy shared API_KEY for older/scripted clients."""
-    if authorization and authorization.lower().startswith("bearer "):
-        token = authorization[len("bearer ") :].strip()
-        username = state.tokens.validate(token)
-        if username is not None:
-            return username
+    """Trust the principal injected after App Service validates an Entra token."""
+    if os.environ.get("WEBSITE_INSTANCE_ID") and entra_principal_id:
+        return entra_principal_name or entra_principal_id
     expected = os.environ.get("API_KEY")
     if expected and x_api_key == expected:
         return "api_key"
@@ -190,6 +203,11 @@ class LiveViewStatus(BaseModel):
     url: str | None
 
 
+class VoiceMessageStatus(BaseModel):
+    camera_id: str
+    played: bool
+
+
 class LoginRequest(BaseModel):
     username: str
     password: str
@@ -227,14 +245,14 @@ def health() -> dict:
 
 
 @app.get("/api/cameras", response_model=list[CameraSummary])
-def list_cameras(_: None = Depends(_require_api_key)) -> list[CameraSummary]:
+def list_cameras(_: str = Depends(_require_auth)) -> list[CameraSummary]:
     return [
         CameraSummary(id=c.id, name=c.name, type=c.type) for c in state.config.cameras
     ]
 
 
 @app.get("/api/cameras/{camera_id}/motion", response_model=MotionStatus)
-def get_motion_status(camera_id: str, _: None = Depends(_require_api_key)) -> MotionStatus:
+def get_motion_status(camera_id: str, _: str = Depends(_require_auth)) -> MotionStatus:
     for camera in state.config.cameras:
         if camera.id == camera_id:
             watcher = state._motion_watchers.get(camera_id)
@@ -272,7 +290,7 @@ def get_live_view_status(
 
 
 @app.get("/api/discover", response_model=list[DiscoveredCamera])
-async def discover_cameras(_: None = Depends(_require_api_key)) -> list[DiscoveredCamera]:
+async def discover_cameras(_: str = Depends(_require_auth)) -> list[DiscoveredCamera]:
     """Scan the gateway host's own LAN subnet for candidate cameras."""
     return await scan_network()
 
@@ -305,6 +323,34 @@ def capture_and_store(
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     return CaptureResult(camera_id=camera_id, location=location, timestamp=ts.isoformat())
+
+
+@app.post(
+    "/api/cameras/{camera_id}/voice-message", response_model=VoiceMessageStatus
+)
+async def play_voice_message(
+    camera_id: str, request: Request, _: str = Depends(_require_auth)
+) -> VoiceMessageStatus:
+    camera = next((c for c in state.config.cameras if c.id == camera_id), None)
+    if camera is None:
+        raise HTTPException(status_code=404, detail=f"Unknown camera id: {camera_id}")
+    if not isinstance(camera, Hi3518eSshCameraConfig):
+        raise HTTPException(
+            status_code=400, detail="Voice messages require a Hi3518e SSH camera"
+        )
+
+    content_length = request.headers.get("content-length")
+    if content_length and int(content_length) > MAX_VOICE_MESSAGE_BYTES:
+        raise HTTPException(status_code=413, detail="Voice message exceeds the 5 MB limit")
+    audio = await request.body()
+    if len(audio) > MAX_VOICE_MESSAGE_BYTES:
+        raise HTTPException(status_code=413, detail="Voice message exceeds the 5 MB limit")
+
+    try:
+        VoiceMessagePlayer(camera).play(audio)
+    except VoiceMessageError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return VoiceMessageStatus(camera_id=camera_id, played=True)
 
 
 @app.post("/api/cameras/{camera_id}/record/start", response_model=RecordingStatus)
@@ -378,7 +424,7 @@ def download_media(
 
 
 @app.get("/api/config")
-def get_config(_: None = Depends(_require_api_key)) -> dict:
+def get_config(_: str = Depends(_require_auth)) -> dict:
     dumped = state.config.model_dump()
     for camera in dumped.get("cameras", []):
         if "password" in camera:
@@ -392,7 +438,7 @@ def get_config(_: None = Depends(_require_api_key)) -> dict:
 
 @app.put("/api/config/cameras")
 def set_cameras(
-    cameras: list[CameraConfig], _: None = Depends(_require_api_key)
+    cameras: list[CameraConfig], _: str = Depends(_require_auth)
 ) -> dict:
     new_config = state.config.model_copy(update={"cameras": cameras})
     state.reload(new_config)
@@ -400,7 +446,135 @@ def set_cameras(
 
 
 @app.put("/api/config/storage")
-def set_storage(storage: StorageConfig, _: None = Depends(_require_api_key)) -> dict:
+def set_storage(storage: StorageConfig, _: str = Depends(_require_auth)) -> dict:
     new_config = state.config.model_copy(update={"storage": storage})
     state.reload(new_config)
     return {"status": "ok", "provider": storage.provider}
+
+
+class CameraAnnouncement(BaseModel):
+    camera_id: str
+    address: str = ""
+    ssh_port: int | None = None
+
+
+def _ssh_camera_or_404(camera_id: str) -> Hi3518eSshCameraConfig:
+    camera = next((c for c in state.config.cameras if c.id == camera_id), None)
+    if camera is None:
+        raise HTTPException(status_code=404, detail=f"Unknown camera id: {camera_id}")
+    if not isinstance(camera, Hi3518eSshCameraConfig):
+        raise HTTPException(
+            status_code=400, detail="Provisioning requires a Hi3518e SSH camera"
+        )
+    return camera
+
+
+@app.post("/api/cameras/announce")
+def announce_camera(
+    body: CameraAnnouncement, _: None = Depends(_require_api_key)
+) -> dict:
+    """Boot-time check-in from a camera running the on-camera package.
+
+    This is the only camera-to-gateway call in the system; it lets a camera
+    that moved (new DHCP lease, new SSH port) be reached without the gateway
+    having to rediscover it.
+    """
+    camera = _ssh_camera_or_404(body.camera_id)
+    state.camera_announcements[body.camera_id] = {
+        "address": body.address,
+        "ssh_port": body.ssh_port,
+        "seen_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    updated = False
+    if body.address and body.address != camera.host:
+        camera.host = body.address
+        updated = True
+    if body.ssh_port and body.ssh_port != camera.port:
+        camera.port = body.ssh_port
+        updated = True
+    if updated:
+        state.reload(state.config)
+    return {"status": "ok", "updated": updated}
+
+
+@app.get("/api/cameras/{camera_id}/provision")
+def get_camera_provisioning(
+    camera_id: str, _: None = Depends(_require_api_key)
+) -> dict:
+    """Capability probe plus the camera's stored settings, secrets redacted."""
+    camera = _ssh_camera_or_404(camera_id)
+    provisioner = CameraProvisioner(camera)
+    try:
+        capabilities = provisioner.probe()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    settings: dict[str, str] = {}
+    if capabilities.package_installed:
+        try:
+            settings = redact_config(provisioner.read_config())
+        except CameraProvisionError:
+            settings = {}
+
+    return {
+        "camera_id": camera_id,
+        "installed": capabilities.package_installed,
+        "wifi_interface": capabilities.wifi_interface,
+        "tools": capabilities.tools,
+        "can_host_ap": capabilities.can_host_ap,
+        "can_serve_portal": capabilities.can_serve_portal,
+        "boot_hook_candidates": list(capabilities.boot_hook_candidates),
+        "issues": capabilities.blocking_issues,
+        "settings": settings,
+        "last_announcement": state.camera_announcements.get(camera_id),
+    }
+
+
+@app.post("/api/cameras/{camera_id}/provision/install")
+def install_camera_package(
+    camera_id: str, _: None = Depends(_require_api_key)
+) -> dict:
+    camera = _ssh_camera_or_404(camera_id)
+    try:
+        log = CameraProvisioner(camera).install()
+    except CameraProvisionError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return {"status": "ok", "log": log}
+
+
+@app.put("/api/cameras/{camera_id}/provision/config")
+def set_camera_provisioning(
+    camera_id: str,
+    settings: CameraProvisionSettings,
+    reboot: bool = False,
+    _: None = Depends(_require_api_key),
+) -> dict:
+    """Writes settings to the camera. They take effect on the next reboot."""
+    camera = _ssh_camera_or_404(camera_id)
+    provisioner = CameraProvisioner(camera)
+    try:
+        merged = provisioner.write_config(settings)
+        if reboot:
+            provisioner.reboot()
+    except CameraProvisionError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return {
+        "status": "ok",
+        "rebooting": reboot,
+        "settings": redact_config(merged),
+    }
+
+
+@app.post("/api/cameras/{camera_id}/provision/reboot")
+def reboot_camera(camera_id: str, _: None = Depends(_require_api_key)) -> dict:
+    camera = _ssh_camera_or_404(camera_id)
+    try:
+        CameraProvisioner(camera).reboot()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return {"status": "ok", "rebooting": True}

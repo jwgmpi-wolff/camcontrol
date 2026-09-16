@@ -34,14 +34,14 @@ class _MediaViewerScreenState extends State<MediaViewerScreen> {
     if (widget.file.mediaType == 'video') {
       final state = context.read<AppState>();
       final uri = state.api.mediaDownloadUri(widget.cameraId, widget.file.path);
-      final headers = state.apiKey.isNotEmpty
-          ? {'X-API-Key': state.apiKey}
-          : <String, String>{};
-      _controller = VideoPlayerController.networkUrl(uri, httpHeaders: headers)
-        ..initialize().then((_) {
-          if (mounted) setState(() {});
-          _controller!.play();
-        });
+      state.api.authHeaders().then((headers) {
+        if (!mounted) return;
+        _controller = VideoPlayerController.networkUrl(uri, httpHeaders: headers)
+          ..initialize().then((_) {
+            if (mounted) setState(() {});
+            _controller!.play();
+          });
+      });
     }
   }
 
@@ -58,10 +58,7 @@ class _MediaViewerScreenState extends State<MediaViewerScreen> {
     try {
       final state = context.read<AppState>();
       final uri = state.api.mediaDownloadUri(widget.cameraId, widget.file.path);
-      final headers = <String, String>{
-        if (state.token.isNotEmpty) 'Authorization': 'Bearer ${state.token}',
-        if (state.apiKey.isNotEmpty) 'X-API-Key': state.apiKey,
-      };
+      final headers = await state.api.authHeaders();
       final res = await http.get(uri, headers: headers);
       if (res.statusCode >= 400) {
         throw Exception('Download failed: HTTP ${res.statusCode}');

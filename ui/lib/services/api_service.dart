@@ -19,10 +19,10 @@ class ApiService {
 
   final String Function() _baseUrl;
   final String Function() _apiKey;
-  final String Function() _token;
+  final Future<String> Function() _token;
 
-  Map<String, String> get _headers {
-    final token = _token();
+  Future<Map<String, String>> authHeaders() async {
+    final token = await _token();
     final key = _apiKey();
     return {
       'Content-Type': 'application/json',
@@ -48,27 +48,13 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>> health() async {
-    final res = await http.get(_uri('/api/health'), headers: _headers);
+    final res = await http.get(_uri('/api/health'));
     _check(res);
     return jsonDecode(res.body) as Map<String, dynamic>;
   }
 
-  /// Logs in with a username/password and returns a bearer token good for
-  /// 24 hours. Callers are responsible for storing it and passing it back
-  /// in via the `token` closure given to this service's constructor.
-  Future<String> login(String username, String password) async {
-    final res = await http.post(
-      _uri('/api/auth/login'),
-      headers: const {'Content-Type': 'application/json'},
-      body: jsonEncode({'username': username, 'password': password}),
-    );
-    _check(res);
-    final decoded = jsonDecode(res.body) as Map<String, dynamic>;
-    return decoded['token'] as String;
-  }
-
   Future<List<Camera>> listCameras() async {
-    final res = await http.get(_uri('/api/cameras'), headers: _headers);
+    final res = await http.get(_uri('/api/cameras'), headers: await authHeaders());
     _check(res);
     final list = jsonDecode(res.body) as List;
     return list
@@ -80,7 +66,7 @@ class ApiService {
   /// Can take several seconds since it probes the whole /24.
   Future<List<DiscoveredCamera>> discoverCameras() async {
     final res = await http
-        .get(_uri('/api/discover'), headers: _headers)
+        .get(_uri('/api/discover'), headers: await authHeaders())
         .timeout(const Duration(seconds: 30));
     _check(res);
     final list = jsonDecode(res.body) as List;
@@ -94,7 +80,7 @@ class ApiService {
   /// slow retries server-side, so this allows a generous ceiling.
   Future<Uint8List> fetchSnapshot(String cameraId) async {
     final res = await http
-        .get(_uri('/api/cameras/$cameraId/snapshot'), headers: _headers)
+        .get(_uri('/api/cameras/$cameraId/snapshot'), headers: await authHeaders())
         .timeout(const Duration(seconds: 60));
     _check(res);
     return res.bodyBytes;
@@ -103,7 +89,7 @@ class ApiService {
   Future<Map<String, dynamic>> captureAndStore(String cameraId) async {
     final res = await http.post(
       _uri('/api/cameras/$cameraId/capture'),
-      headers: _headers,
+      headers: await authHeaders(),
     );
     _check(res);
     return jsonDecode(res.body) as Map<String, dynamic>;
@@ -112,7 +98,7 @@ class ApiService {
   Future<List<MediaFile>> listMedia(String cameraId) async {
     final res = await http.get(
       _uri('/api/cameras/$cameraId/media'),
-      headers: _headers,
+      headers: await authHeaders(),
     );
     _check(res);
     final list = jsonDecode(res.body) as List;
@@ -129,7 +115,7 @@ class ApiService {
   Future<Map<String, dynamic>> startRecording(String cameraId) async {
     final res = await http.post(
       _uri('/api/cameras/$cameraId/record/start'),
-      headers: _headers,
+      headers: await authHeaders(),
     );
     _check(res);
     return jsonDecode(res.body) as Map<String, dynamic>;
@@ -138,7 +124,7 @@ class ApiService {
   Future<Map<String, dynamic>> stopRecording(String cameraId) async {
     final res = await http.post(
       _uri('/api/cameras/$cameraId/record/stop'),
-      headers: _headers,
+      headers: await authHeaders(),
     );
     _check(res);
     return jsonDecode(res.body) as Map<String, dynamic>;
@@ -147,7 +133,7 @@ class ApiService {
   Future<Map<String, dynamic>> recordingStatus(String cameraId) async {
     final res = await http.get(
       _uri('/api/cameras/$cameraId/record/status'),
-      headers: _headers,
+      headers: await authHeaders(),
     );
     _check(res);
     return jsonDecode(res.body) as Map<String, dynamic>;
@@ -156,14 +142,14 @@ class ApiService {
   Future<Map<String, dynamic>> getLiveViewStatus(String cameraId) async {
     final res = await http.get(
       _uri('/api/cameras/$cameraId/live_view'),
-      headers: _headers,
+      headers: await authHeaders(),
     );
     _check(res);
     return jsonDecode(res.body) as Map<String, dynamic>;
   }
 
   Future<Map<String, dynamic>> getConfig() async {
-    final res = await http.get(_uri('/api/config'), headers: _headers);
+    final res = await http.get(_uri('/api/config'), headers: await authHeaders());
     _check(res);
     return jsonDecode(res.body) as Map<String, dynamic>;
   }
@@ -171,7 +157,7 @@ class ApiService {
   Future<void> setCameras(List<Map<String, dynamic>> cameras) async {
     final res = await http.put(
       _uri('/api/config/cameras'),
-      headers: _headers,
+      headers: await authHeaders(),
       body: jsonEncode(cameras),
     );
     _check(res);
@@ -180,7 +166,7 @@ class ApiService {
   Future<void> setStorage(Map<String, dynamic> storage) async {
     final res = await http.put(
       _uri('/api/config/storage'),
-      headers: _headers,
+      headers: await authHeaders(),
       body: jsonEncode(storage),
     );
     _check(res);

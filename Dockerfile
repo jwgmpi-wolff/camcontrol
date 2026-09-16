@@ -9,12 +9,10 @@ COPY pyproject.toml ./
 COPY src ./src
 RUN pip install --no-cache-dir .
 
-# config/ is expected to be an Azure Files mount in App Service (persists
-# cameras.json/users.json across restarts and redeploys); captures/ is
-# unused on this target since storage is configured to the azure_blob
-# provider instead of local disk.
+# /home is persisted by App Service when app storage is enabled.
 ENV HOST=0.0.0.0
 ENV PORT=8000
+ENV CAMCONTROL_CONFIG_DIR=/home/data
 EXPOSE 8000
 
 CMD ["python", "-m", "camera_bridge.main"]

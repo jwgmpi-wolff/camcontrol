@@ -27,10 +27,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late TextEditingController _nameCtrl;
   late TextEditingController _urlCtrl;
   late TextEditingController _keyCtrl;
-  late TextEditingController _userCtrl;
-  final _passCtrl = TextEditingController();
   bool _obscureKey = true;
-  bool _obscurePass = true;
   bool _saved = false;
   bool _loggingIn = false;
   String? _loginError;
@@ -57,7 +54,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _nameCtrl = TextEditingController(text: profile.name);
     _urlCtrl = TextEditingController(text: profile.baseUrl);
     _keyCtrl = TextEditingController(text: profile.apiKey);
-    _userCtrl = TextEditingController(text: profile.username);
     _mode = profile.mode;
   }
 
@@ -66,8 +62,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _nameCtrl.dispose();
     _urlCtrl.dispose();
     _keyCtrl.dispose();
-    _userCtrl.dispose();
-    _passCtrl.dispose();
     _wifiSsidCtrl.dispose();
     _wifiPasswordCtrl.dispose();
     super.dispose();
@@ -147,8 +141,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       await context
           .read<AppState>()
-          .login(_userCtrl.text.trim(), _passCtrl.text);
-      _passCtrl.clear();
+          .login();
     } catch (e) {
       _loginError = e.toString();
     } finally {
@@ -300,42 +293,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 12),
           Text('Account', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),
-          if (state.token.isNotEmpty)
+          if (state.isSignedIn)
             ListTile(
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.verified_user, color: Colors.green),
               title: Text('Signed in as ${state.username}'),
               trailing: TextButton(
-                onPressed: () => state.logout(),
+                onPressed: state.logout,
                 child: const Text('Log out'),
               ),
             )
           else ...[
-            TextField(
-              controller: _userCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Username',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.person_outline),
-              ),
-              autocorrect: false,
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _passCtrl,
-              obscureText: _obscurePass,
-              decoration: InputDecoration(
-                labelText: 'Password',
-                border: const OutlineInputBorder(),
-                prefixIcon: const Icon(Icons.lock_outline),
-                suffixIcon: IconButton(
-                  icon: Icon(
-                      _obscurePass ? Icons.visibility : Icons.visibility_off),
-                  onPressed: () => setState(() => _obscurePass = !_obscurePass),
-                ),
-              ),
-              onSubmitted: (_) => _login(),
-            ),
+            const Text('Sign in with your Wolff Microsoft Entra account.'),
             if (_loginError != null) ...[
               const SizedBox(height: 8),
               Text(_loginError!, style: const TextStyle(color: Colors.red)),

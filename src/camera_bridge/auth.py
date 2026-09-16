@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import os
 import secrets
 import threading
 import time
@@ -19,7 +20,7 @@ from .blob_config_sync import download_if_configured, upload_if_configured
 _PBKDF2_ITERATIONS = 200_000
 _TOKEN_TTL_SECONDS = 24 * 60 * 60
 
-DEFAULT_USERS_PATH = Path("config/users.json")
+DEFAULT_USERS_PATH = Path(os.environ.get("CAMCONTROL_CONFIG_DIR", "config")) / "users.json"
 
 
 def hash_password(password: str, *, salt: bytes | None = None) -> str:

@@ -10,6 +10,7 @@ import 'models/camera.dart';
 import 'models/direct_camera.dart';
 import 'models/gateway_profile.dart';
 import 'services/api_service.dart';
+import 'services/entra_auth_service.dart';
 import 'screens/multiview_screen.dart';
 import 'screens/media_browser_screen.dart';
 import 'screens/settings_screen.dart';
@@ -19,7 +20,7 @@ void main() async {
   final prefs = await SharedPreferences.getInstance();
   runApp(
     ChangeNotifierProvider(
-      create: (_) => AppState(prefs)..refreshCameras(),
+      create: (_) => AppState(prefs)..initialize(),
       child: const CamControlApp(),
     ),
   );
@@ -32,6 +33,7 @@ class AppState extends ChangeNotifier {
   }
 
   final SharedPreferences _prefs;
+  final EntraAuthService _entraAuth = EntraAuthService();
   List<GatewayProfile> profiles = [];
   int _activeIndex = 0;
   int _pollIntervalSeconds = 0; // 0 = use each camera's own default
@@ -41,8 +43,8 @@ class AppState extends ChangeNotifier {
 
   String get baseUrl => profiles.isEmpty ? '' : activeProfile.baseUrl;
   String get apiKey => profiles.isEmpty ? '' : activeProfile.apiKey;
-  String get token => profiles.isEmpty ? '' : activeProfile.token;
   String get username => profiles.isEmpty ? '' : activeProfile.username;
+  bool get isSignedIn => username.isNotEmpty;
 
   /// True when the active profile connects straight to cameras' own IPs,
   /// bypassing the camera_bridge gateway entirely.
@@ -86,7 +88,11 @@ class AppState extends ChangeNotifier {
   /// 0 means "use each camera's own recommended interval".
   int get pollIntervalSeconds => _pollIntervalSeconds;
 
-  late final ApiService api = ApiService(() => baseUrl, () => apiKey, () => token);
+  late final ApiService api = ApiService(
+    () => baseUrl,
+    () => apiKey,
+    _entraAuth.accessToken,
+  );
 
   String status = 'disconnected';
   List<Camera> cameras = [];
@@ -151,17 +157,27 @@ class AppState extends ChangeNotifier {
     await refreshCameras();
   }
 
-  Future<void> login(String username, String password) async {
-    final issuedToken = await api.login(username, password);
-    activeProfile.username = username;
-    activeProfile.token = issuedToken;
+  Future<void> initialize() async {
+    await _entraAuth.initialize();
+    if (_entraAuth.username.isNotEmpty) {
+      activeProfile.username = _entraAuth.username;
+      await _saveProfiles();
+    }
+    await refreshCameras();
+  }
+
+  Future<void> login() async {
+    activeProfile.username = await _entraAuth.signIn();
+    activeProfile.token = '';
     await _saveProfiles();
     notifyListeners();
   }
 
-  void logout() {
+  Future<void> logout() async {
+    await _entraAuth.signOut();
+    activeProfile.username = '';
     activeProfile.token = '';
-    _saveProfiles();
+    await _saveProfiles();
     notifyListeners();
   }
 
@@ -201,6 +217,11 @@ class AppState extends ChangeNotifier {
       await api.health();
       cameras = await api.listCameras();
       status = 'ok';
+    } on ApiException catch (error) {
+      status = error.status == 401 || error.status == 403
+          ? 'authenticationRequired'
+          : 'unreachable';
+      cameras = [];
     } catch (_) {
       status = 'unreachable';
       cameras = [];
@@ -239,6 +260,7 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   int _index = 0;
   StreamSubscription<Uri>? _linkSub;
+  bool _authDialogVisible = false;
 
   @override
   void initState() {
@@ -288,6 +310,86 @@ class _MainShellState extends State<MainShell> {
     super.dispose();
   }
 
+  Future<void> _showAuthenticationDialog() async {
+    if (_authDialogVisible || !mounted) return;
+    _authDialogVisible = true;
+    String? errorMessage;
+    var submitting = false;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Sign in to gateway'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Use your Wolff Microsoft Entra account.'),
+              if (errorMessage != null) ...[
+                const SizedBox(height: 12),
+                Text(
+                  errorMessage!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            FilledButton(
+              onPressed: submitting
+                  ? null
+                  : () => _submitAuthentication(
+                        dialogContext,
+                        setDialogState,
+                        (value) => errorMessage = value,
+                        (value) => submitting = value,
+                      ),
+              child: submitting
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Sign in'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    _authDialogVisible = false;
+  }
+
+  Future<void> _submitAuthentication(
+    BuildContext dialogContext,
+    StateSetter setDialogState,
+    ValueChanged<String?> setError,
+    ValueChanged<bool> setSubmitting,
+  ) async {
+    setDialogState(() {
+      setSubmitting(true);
+      setError(null);
+    });
+    try {
+      final state = context.read<AppState>();
+      await state.login();
+      await state.refreshCameras();
+      if (dialogContext.mounted && state.status != 'authenticationRequired') {
+        Navigator.of(dialogContext).pop();
+      } else if (dialogContext.mounted) {
+        setDialogState(() => setError('Authentication failed'));
+      }
+    } catch (error) {
+      if (dialogContext.mounted) {
+        setDialogState(() => setError(error.toString()));
+      }
+    } finally {
+      if (dialogContext.mounted) {
+        setDialogState(() => setSubmitting(false));
+      }
+    }
+  }
+
   static const _cameraScreens = [
     MultiViewScreen(),
     MediaBrowserScreen(),
@@ -303,7 +405,11 @@ class _MainShellState extends State<MainShell> {
 
   @override
   Widget build(BuildContext context) {
-    final isDirect = context.watch<AppState>().isDirectMode;
+    final state = context.watch<AppState>();
+    if (state.status == 'authenticationRequired' && !_authDialogVisible) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _showAuthenticationDialog());
+    }
+    final isDirect = state.isDirectMode;
     final screens = isDirect ? _directScreens : _cameraScreens;
     final labels = isDirect ? _directLabels : _cameraLabels;
     final icons = isDirect ? _directIcons : _cameraIcons;

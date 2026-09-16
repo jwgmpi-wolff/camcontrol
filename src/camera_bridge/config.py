@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 from .blob_config_sync import download_if_configured, upload_if_configured
 from .models import AppConfig
 
-DEFAULT_CONFIG_PATH = Path("config/cameras.json")
+DEFAULT_CONFIG_PATH = Path(os.environ.get("CAMCONTROL_CONFIG_DIR", "config")) / "cameras.json"
 
 
 def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
