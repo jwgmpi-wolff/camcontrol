@@ -334,6 +334,12 @@ def test_settings_serialise_booleans_as_shell_flags():
     }
 
 
+def test_settings_serialise_snapshot_push_interval():
+    assert CameraProvisionSettings(push_interval_seconds=5).to_config_entries() == {
+        "push_interval_seconds": "5"
+    }
+
+
 def test_settings_omit_untouched_fields():
     assert CameraProvisionSettings().to_config_entries() == {}
 

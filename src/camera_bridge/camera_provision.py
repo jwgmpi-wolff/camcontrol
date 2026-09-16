@@ -83,6 +83,7 @@ class CameraProvisionSettings(BaseModel):
     api_endpoint: str | None = None
     api_key: str | None = None
     camera_id: str | None = None
+    push_interval_seconds: int | None = Field(default=None, ge=0)
     ap_ssid: str | None = None
     ap_psk: str | None = None
     ap_always: bool | None = None

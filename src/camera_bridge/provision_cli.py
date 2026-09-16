@@ -70,6 +70,7 @@ def _build_settings(args: argparse.Namespace) -> CameraProvisionSettings:
         "admin_user",
         "api_endpoint",
         "camera_id",
+        "push_interval_seconds",
         "ap_ssid",
         "portal_port",
         "ap_timeout_seconds",
@@ -172,6 +173,7 @@ def _add_setting_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--admin-user", dest="admin_user")
     parser.add_argument("--api-endpoint", dest="api_endpoint")
     parser.add_argument("--camera-id", dest="camera_id")
+    parser.add_argument("--push-interval-seconds", type=int, dest="push_interval_seconds")
     parser.add_argument("--ap-ssid", dest="ap_ssid")
     parser.add_argument("--portal-port", type=int, dest="portal_port")
     parser.add_argument("--ap-timeout-seconds", type=int, dest="ap_timeout_seconds")
