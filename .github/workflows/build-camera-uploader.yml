@@ -1,0 +1,29 @@
+name: Build camera HTTPS uploader
+
+on:
+  push:
+    paths:
+      - src/camera_bridge/oncam/uploader/**
+      - .github/workflows/build-camera-uploader.yml
+  workflow_dispatch:
+
+jobs:
+  build-armv5:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: Build static ARM uploader
+        working-directory: src/camera_bridge/oncam/uploader
+        env:
+          CGO_ENABLED: "0"
+          GOOS: linux
+          GOARCH: arm
+          GOARM: "5"
+        run: go build -trimpath -ldflags='-s -w' -o camcontrol-uploader .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: camcontrol-uploader-armv5
+          path: src/camera_bridge/oncam/uploader/camcontrol-uploader
