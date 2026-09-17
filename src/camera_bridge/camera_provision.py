@@ -49,6 +49,7 @@ _PAYLOAD_FILES = {
     "camcontrol-httpd.sh": "camcontrol-httpd.sh",
     "camcontrol-boot.sh": "camcontrol-boot.sh",
     "camcontrol.conf": "camcontrol.conf",
+    "camcontrol-uploader": "camcontrol-uploader",
     "install.sh": "install.sh",
 }
 
@@ -175,8 +176,11 @@ def load_payload() -> dict[str, bytes]:
         for part in relative.split("/"):
             resource = resource.joinpath(part)
         # LF only: busybox ash chokes on CRLF shebang lines.
-        text = resource.read_text(encoding="utf-8").replace("\r\n", "\n")
-        payload[remote_name] = text.encode("utf-8")
+        if remote_name == "camcontrol-uploader":
+            payload[remote_name] = resource.read_bytes()
+        else:
+            text = resource.read_text(encoding="utf-8").replace("\r\n", "\n")
+            payload[remote_name] = text.encode("utf-8")
     return payload
 
 

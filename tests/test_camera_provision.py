@@ -121,6 +121,7 @@ def test_payload_ships_every_on_camera_file():
         "camcontrol-httpd.sh",
         "camcontrol-boot.sh",
         "camcontrol.conf",
+        "camcontrol-uploader",
         "install.sh",
     }
 
@@ -349,9 +350,9 @@ def test_on_camera_payload_pushes_preview_after_wifi_connects():
     boot = load_payload()["camcontrol-boot.sh"].decode()
 
     assert "push-snapshot" in apply
+    assert "camcontrol-uploader" in apply
     assert "camcontrol-apply.sh\" push" in boot
-    assert apply.count("--no-check-certificate") == 2
-    assert apply.count("X-Camera-Key") == 2
+    assert apply.count("X-Camera-Key") == 1
 
 
 def test_probe_reports_capabilities_and_issues():

@@ -43,6 +43,13 @@ for f in camcontrol-common.sh camcontrol-apply.sh camcontrol-portal.sh \
     chmod 755 "$CAMCONTROL_DIR/bin/$f"
 done
 
+if [ ! -f "$STAGE_DIR/camcontrol-uploader" ]; then
+    say "FAILED: missing camcontrol-uploader in staging directory"
+    exit 1
+fi
+cp "$STAGE_DIR/camcontrol-uploader" "$CAMCONTROL_DIR/bin/camcontrol-uploader" || exit 1
+chmod 755 "$CAMCONTROL_DIR/bin/camcontrol-uploader"
+
 if [ ! -f "$CAMCONTROL_CONF" ]; then
     cp "$STAGE_DIR/camcontrol.conf" "$CAMCONTROL_CONF" || exit 1
     say "installed default configuration"
