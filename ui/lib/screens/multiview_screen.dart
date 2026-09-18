@@ -110,7 +110,10 @@ class MultiViewScreen extends StatelessWidget {
         ],
       ),
       body: state.status == 'unreachable'
-          ? _GatewayUnreachable(baseUrl: state.baseUrl)
+          ? _GatewayUnreachable(
+              baseUrl: state.baseUrl,
+              error: state.connectionError,
+            )
           : state.cameras.isEmpty
               ? const _NoCameras()
               : LayoutBuilder(
@@ -135,8 +138,9 @@ class MultiViewScreen extends StatelessWidget {
 }
 
 class _GatewayUnreachable extends StatelessWidget {
-  const _GatewayUnreachable({required this.baseUrl});
+  const _GatewayUnreachable({required this.baseUrl, this.error});
   final String baseUrl;
+  final String? error;
 
   @override
   Widget build(BuildContext context) {
@@ -149,6 +153,17 @@ class _GatewayUnreachable extends StatelessWidget {
           const Text('Gateway unreachable'),
           const SizedBox(height: 4),
           Text(baseUrl, style: Theme.of(context).textTheme.bodySmall),
+          if (error != null) ...[
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Text(
+                error!,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+          ],
         ],
       ),
     );

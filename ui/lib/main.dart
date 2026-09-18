@@ -96,6 +96,7 @@ class AppState extends ChangeNotifier {
 
   String status = 'disconnected';
   String? authenticationError;
+  String? connectionError;
   List<Camera> cameras = [];
 
   void _loadProfiles() {
@@ -219,15 +220,20 @@ class AppState extends ChangeNotifier {
       cameras = await api.listCameras();
       status = 'ok';
       authenticationError = null;
+      connectionError = null;
     } on ApiException catch (error) {
       status = error.status == 401 || error.status == 403
           ? 'authenticationRequired'
           : 'unreachable';
       authenticationError =
           error.status == 401 || error.status == 403 ? 'Gateway returned HTTP ${error.status}' : null;
+      connectionError = error.status == 401 || error.status == 403
+          ? null
+          : '${error.runtimeType}: ${error.message}';
       cameras = [];
-    } catch (_) {
+    } catch (error) {
       status = 'unreachable';
+      connectionError = error.runtimeType.toString();
       cameras = [];
     }
     notifyListeners();

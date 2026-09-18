@@ -405,7 +405,7 @@ class CameraProvisioner:
                 client,
                 f"STAGE_DIR={shlex.quote(STAGE_DIR)} "
                 f"sh {shlex.quote(STAGE_DIR)}/install.sh 2>&1",
-                timeout=60,
+                timeout=180,
             )
             if code != 0:
                 raise CameraProvisionError(
