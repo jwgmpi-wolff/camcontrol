@@ -27,6 +27,9 @@ void main() async {
 }
 
 class AppState extends ChangeNotifier {
+  static const _remoteCameraProfileName = 'Remote cameras';
+  static const _remoteCameraHost = '71.231.145.114';
+
   AppState(this._prefs) {
     _loadProfiles();
     _pollIntervalSeconds = _prefs.getInt('pollIntervalSeconds') ?? 0;
@@ -36,6 +39,7 @@ class AppState extends ChangeNotifier {
   final EntraAuthService _entraAuth = EntraAuthService();
   List<GatewayProfile> profiles = [];
   int _activeIndex = 0;
+  bool _profilesNeedSaving = false;
   int _pollIntervalSeconds = 0; // 0 = use each camera's own default
 
   GatewayProfile get activeProfile => profiles[_activeIndex];
@@ -113,7 +117,38 @@ class AppState extends ChangeNotifier {
       final legacyKey = _prefs.getString('apiKey') ?? '';
       profiles = [GatewayProfile(name: 'Local', baseUrl: legacyUrl, apiKey: legacyKey)];
     }
+    final remoteProfileIndex = profiles.indexWhere(
+      (profile) => profile.name == _remoteCameraProfileName,
+    );
+    if (remoteProfileIndex == -1) {
+      profiles.add(
+        GatewayProfile(
+          name: _remoteCameraProfileName,
+          baseUrl: '',
+          mode: 'direct',
+          directCameras: [
+            DirectCamera(
+              id: 'remote-front-yard',
+              name: 'Front Yard',
+              host: '$_remoteCameraHost:34100',
+            ),
+            DirectCamera(
+              id: 'remote-camera-2',
+              name: 'Camera 2',
+              host: '$_remoteCameraHost:34101',
+            ),
+          ],
+        ),
+      );
+      _profilesNeedSaving = true;
+    }
     _activeIndex = _prefs.getInt('activeProfileIndex') ?? 0;
+    if (_prefs.getBool('remoteCameraProfileSelected') != true) {
+      _activeIndex = profiles.indexWhere(
+        (profile) => profile.name == _remoteCameraProfileName,
+      );
+      _profilesNeedSaving = true;
+    }
     if (_activeIndex < 0 || _activeIndex >= profiles.length) _activeIndex = 0;
   }
 
@@ -161,6 +196,11 @@ class AppState extends ChangeNotifier {
 
   Future<void> initialize() async {
     await _entraAuth.initialize();
+    if (_profilesNeedSaving) {
+      await _saveProfiles();
+      await _prefs.setBool('remoteCameraProfileSelected', true);
+      _profilesNeedSaving = false;
+    }
     if (_entraAuth.username.isNotEmpty) {
       activeProfile.username = _entraAuth.username;
       await _saveProfiles();
