@@ -85,6 +85,7 @@ class CameraProvisionSettings(BaseModel):
     api_key: str | None = None
     camera_id: str | None = None
     push_interval_seconds: int | None = Field(default=None, ge=0)
+    remote_http_port: int | None = None
     ap_ssid: str | None = None
     ap_psk: str | None = None
     ap_always: bool | None = None
@@ -92,7 +93,7 @@ class CameraProvisionSettings(BaseModel):
     ap_timeout_seconds: int | None = Field(default=None, ge=0)
     wifi_wait_seconds: int | None = Field(default=None, ge=0)
 
-    @field_validator("ssh_port", "portal_port")
+    @field_validator("ssh_port", "remote_http_port", "portal_port")
     @classmethod
     def _valid_port(cls, value: int | None) -> int | None:
         if value is not None and not 1 <= value <= 65535:
@@ -288,9 +289,9 @@ class CameraProvisioner:
             port=self._config.port,
             username=self._config.username,
             password=self._config.password,
-            timeout=10,
-            banner_timeout=10,
-            auth_timeout=10,
+            timeout=30,
+            banner_timeout=30,
+            auth_timeout=30,
             look_for_keys=False,
             allow_agent=False,
         )
@@ -399,7 +400,8 @@ class CameraProvisioner:
                     f"Cannot create staging directory: {err.strip() or code}"
                 )
             for name, data in payload.items():
-                self._upload(client, data, f"{STAGE_DIR}/{name}")
+                timeout = 180 if name == "camcontrol-uploader" else 20
+                self._upload(client, data, f"{STAGE_DIR}/{name}", timeout=timeout)
 
             out, err, code = self._run(
                 client,

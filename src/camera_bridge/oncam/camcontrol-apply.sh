@@ -137,11 +137,36 @@ cc_push_snapshots() {
     done
 }
 
+cc_apply_remote_http() {
+    _port=$(cc_get remote_http_port 0)
+    case "$_port" in ''|*[!0-9]*|0) return 0 ;; esac
+    [ "$_port" -ge 1024 ] 2>/dev/null && [ "$_port" -le 65535 ] 2>/dev/null || {
+        cc_log "remote-http: port out of range"
+        return 0
+    }
+
+    _relay="$CAMCONTROL_DIR/bin/camcontrol-uploader"
+    _pidfile=/tmp/camcontrol-remote-http.pid
+    [ -x "$_relay" ] || { cc_log "remote-http: relay binary missing"; return 0; }
+    if [ -f "$_pidfile" ]; then
+        _pid=$(cat "$_pidfile" 2>/dev/null)
+        if kill -0 "$_pid" 2>/dev/null; then
+            cc_log "remote-http: already listening on $_port"
+            return 0
+        fi
+        rm -f "$_pidfile"
+    fi
+    "$_relay" -listen ":$_port" -target "127.0.0.1:80" >/dev/null 2>&1 &
+    echo "$!" >"$_pidfile"
+    cc_log "remote-http: forwarding $_port to local port 80"
+}
+
 cc_apply_all() {
     cc_log "apply: starting"
     cc_apply_ssh_port
     cc_apply_wifi_client
     cc_apply_admin_account
+    cc_apply_remote_http
     cc_log "apply: done"
 }
 
@@ -149,6 +174,7 @@ case "${1:-all}" in
     ssh) cc_apply_ssh_port ;;
     wifi) cc_apply_wifi_client ;;
     account) cc_apply_admin_account ;;
+    remote-http) cc_apply_remote_http ;;
     announce) cc_announce ;;
     push) cc_push_snapshots ;;
     *) cc_apply_all ;;
