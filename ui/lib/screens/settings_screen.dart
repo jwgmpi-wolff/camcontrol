@@ -35,6 +35,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   late TextEditingController _wifiSsidCtrl;
   late TextEditingController _wifiPasswordCtrl;
+  late TextEditingController _yiBindKeyCtrl;
   String _wifiSecurity = 'WPA';
   bool _obscureWifiPassword = true;
   bool _wifiSaved = false;
@@ -46,6 +47,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final state = context.read<AppState>();
     _wifiSsidCtrl = TextEditingController(text: state.wifiSsid);
     _wifiPasswordCtrl = TextEditingController(text: state.wifiPassword);
+    _yiBindKeyCtrl = TextEditingController(text: state.yiBindKey);
     _wifiSecurity = state.wifiSecurity;
   }
 
@@ -64,6 +66,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _keyCtrl.dispose();
     _wifiSsidCtrl.dispose();
     _wifiPasswordCtrl.dispose();
+    _yiBindKeyCtrl.dispose();
     super.dispose();
   }
 
@@ -72,6 +75,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ssid: _wifiSsidCtrl.text.trim(),
           password: _wifiPasswordCtrl.text,
           security: _wifiSecurity,
+          yiBindKey: _yiBindKeyCtrl.text.trim(),
         );
     setState(() => _wifiSaved = true);
     await Future<void>.delayed(const Duration(seconds: 2));
@@ -350,9 +354,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Text('Wi-Fi reconnect', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),
           const Text(
-            'Save your home Wi-Fi network here so you always have a QR code '
-            '(or the credentials to type in by hand) if the network name or '
-            'password ever changes. Stored only on this device.',
+            'Generate a YI camera onboarding QR code for your home Wi-Fi. '
+            'The pairing key is optional unless the YI setup app supplied one. '
+            'All values are stored only on this device.',
             style: TextStyle(fontSize: 12),
           ),
           const SizedBox(height: 12),
@@ -386,6 +390,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onChanged: (_) => setState(() {}),
           ),
           const SizedBox(height: 12),
+          TextField(
+            controller: _yiBindKeyCtrl,
+            decoration: const InputDecoration(
+              labelText: 'YI pairing key (optional)',
+              border: OutlineInputBorder(),
+              prefixIcon: Icon(Icons.key_outlined),
+            ),
+            autocorrect: false,
+            onChanged: (_) => setState(() {}),
+          ),
+          const SizedBox(height: 12),
           DropdownButtonFormField<String>(
             initialValue: _wifiSecurity,
             decoration: const InputDecoration(
@@ -412,18 +427,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 padding: const EdgeInsets.all(16),
                 color: Colors.white,
                 child: QrImageView(
-                  data: buildWifiQrPayload(
+                  data: buildYiWifiQrPayload(
                     ssid: _wifiSsidCtrl.text.trim(),
                     password: _wifiPasswordCtrl.text,
-                    security: _wifiSecurity,
+                    bindKey: _yiBindKeyCtrl.text,
                   ),
-                  size: 200,
+                  size: 280,
                   backgroundColor: Colors.white,
+                  errorCorrectionLevel: QrErrorCorrectLevel.M,
                 ),
               ),
             ),
             const SizedBox(height: 12),
-            Text('Scan with a phone camera to join the network.',
+            Text('Show this QR code to the camera during YI Wi-Fi setup.',
                 style: TextStyle(fontSize: 12, color: Colors.grey.shade400)),
             const SizedBox(height: 12),
             Text('Manual entry', style: Theme.of(context).textTheme.titleSmall),

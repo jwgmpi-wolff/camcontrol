@@ -235,15 +235,18 @@ class AppState extends ChangeNotifier {
   String get wifiSsid => _prefs.getString('wifiSsid') ?? '';
   String get wifiPassword => _prefs.getString('wifiPassword') ?? '';
   String get wifiSecurity => _prefs.getString('wifiSecurity') ?? 'WPA';
+  String get yiBindKey => _prefs.getString('yiBindKey') ?? '';
 
   Future<void> setWifiCredentials({
     required String ssid,
     required String password,
     required String security,
+    required String yiBindKey,
   }) async {
     await _prefs.setString('wifiSsid', ssid);
     await _prefs.setString('wifiPassword', password);
     await _prefs.setString('wifiSecurity', security);
+    await _prefs.setString('yiBindKey', yiBindKey);
     notifyListeners();
   }
 
