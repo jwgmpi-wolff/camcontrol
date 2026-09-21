@@ -29,6 +29,7 @@ void main() async {
 class AppState extends ChangeNotifier {
   static const _remoteCameraProfileName = 'Remote cameras';
   static const _remoteCameraHost = '71.231.145.114';
+  static const _localCameraProfileName = 'Local cameras';
 
   AppState(this._prefs) {
     _loadProfiles();
@@ -142,10 +143,41 @@ class AppState extends ChangeNotifier {
       );
       _profilesNeedSaving = true;
     }
+    final localProfileIndex = profiles.indexWhere(
+      (profile) => profile.name == _localCameraProfileName,
+    );
+    if (localProfileIndex == -1) {
+      profiles.add(
+        GatewayProfile(
+          name: _localCameraProfileName,
+          baseUrl: '',
+          mode: 'direct',
+          directCameras: [
+            DirectCamera(
+              id: 'local-front-yard',
+              name: 'Front Yard',
+              host: '10.0.0.246',
+            ),
+            DirectCamera(
+              id: 'local-camera-2',
+              name: 'Camera 2',
+              host: '10.0.0.252',
+            ),
+          ],
+        ),
+      );
+      _profilesNeedSaving = true;
+    }
     _activeIndex = _prefs.getInt('activeProfileIndex') ?? 0;
     if (_prefs.getBool('remoteCameraProfileSelected') != true) {
       _activeIndex = profiles.indexWhere(
         (profile) => profile.name == _remoteCameraProfileName,
+      );
+      _profilesNeedSaving = true;
+    }
+    if (_prefs.getBool('localCameraProfileSelected') != true) {
+      _activeIndex = profiles.indexWhere(
+        (profile) => profile.name == _localCameraProfileName,
       );
       _profilesNeedSaving = true;
     }
@@ -199,6 +231,7 @@ class AppState extends ChangeNotifier {
     if (_profilesNeedSaving) {
       await _saveProfiles();
       await _prefs.setBool('remoteCameraProfileSelected', true);
+      await _prefs.setBool('localCameraProfileSelected', true);
       _profilesNeedSaving = false;
     }
     if (_entraAuth.username.isNotEmpty) {
