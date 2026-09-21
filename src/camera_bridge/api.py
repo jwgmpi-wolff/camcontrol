@@ -40,6 +40,10 @@ from .voice_message import (
 app = FastAPI(title="CamControl Gateway")
 
 
+def _gateway_api_key() -> str:
+    return os.environ.get("CAMCONTROL_API_KEY") or os.environ.get("API_KEY", "")
+
+
 class _GatewayState:
     def __init__(self) -> None:
         self.config_path = DEFAULT_CONFIG_PATH
@@ -151,7 +155,7 @@ def _stop_motion_watchers() -> None:
 def _require_api_key(x_api_key: str | None = Header(default=None)) -> None:
     """Legacy admin gate (env-configured shared secret). Used only for
     user-management endpoints, not for video/image access."""
-    expected = os.environ.get("API_KEY")
+    expected = _gateway_api_key()
     if expected and x_api_key != expected:
         raise HTTPException(status_code=401, detail="Invalid or missing API key")
 
@@ -168,14 +172,14 @@ def _require_auth(
     """Trust the principal injected after App Service validates an Entra token."""
     if os.environ.get("WEBSITE_INSTANCE_ID") and entra_principal_id:
         return entra_principal_name or entra_principal_id
-    expected = os.environ.get("API_KEY")
+    expected = _gateway_api_key()
     if expected and x_api_key == expected:
         return "api_key"
     raise HTTPException(status_code=401, detail="Invalid or missing credentials")
 
 
 def _require_camera_key(camera_id: str, camera_key: str | None) -> None:
-    master_key = os.environ.get("API_KEY", "")
+    master_key = _gateway_api_key()
     expected = hmac.new(
         master_key.encode(), camera_id.encode(), hashlib.sha256
     ).hexdigest()
