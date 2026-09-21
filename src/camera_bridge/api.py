@@ -341,10 +341,13 @@ async def push_snapshot(
     payload = await request.body()
     if not payload or len(payload) > 8 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="Invalid snapshot payload")
-    try:
-        state.pushed_snapshots[camera_id] = decode_h264_to_jpeg(payload)
-    except H264DecodeError as exc:
-        raise HTTPException(status_code=422, detail="No decodable camera frame") from exc
+    if payload.startswith(b"\xff\xd8"):
+        state.pushed_snapshots[camera_id] = payload
+    else:
+        try:
+            state.pushed_snapshots[camera_id] = decode_h264_to_jpeg(payload)
+        except H264DecodeError as exc:
+            raise HTTPException(status_code=422, detail="No decodable camera frame") from exc
     return {"status": "ok"}
 
 
