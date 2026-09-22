@@ -71,7 +71,8 @@ cc_run() {
         if cc_wifi_associated; then
             cc_log "boot: wifi associated"
             sh "$CC_BIN/camcontrol-apply.sh" announce
-            exec sh "$CC_BIN/camcontrol-apply.sh" push
+            sh "$CC_BIN/camcontrol-apply.sh" push >/dev/null 2>&1 &
+            return 0
         fi
         sleep 5
         _waited=$((_waited + 5))

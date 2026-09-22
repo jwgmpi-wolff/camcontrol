@@ -109,7 +109,6 @@ failed:
 int main(void) {
     char endpoint[256], host[128], port[16], camera_id[128], camera_key[128], interval_text[16];
     unsigned int interval = 1;
-    signal(SIGHUP, SIG_IGN);
     signal(SIGTERM, stop_streamer);
     signal(SIGINT, stop_streamer);
     while (running) {
