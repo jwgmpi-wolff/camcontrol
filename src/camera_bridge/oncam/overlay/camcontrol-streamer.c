@@ -14,15 +14,6 @@
 
 static volatile sig_atomic_t running = 1;
 
-static int detach_from_boot_shell(void) {
-    pid_t pid;
-    signal(SIGHUP, SIG_IGN);
-    pid = fork();
-    if (pid < 0) return -1;
-    if (pid > 0) return 1;
-    return 0;
-}
-
 static void stop_streamer(int signal_number) {
     (void)signal_number;
     running = 0;
@@ -118,7 +109,7 @@ failed:
 int main(void) {
     char endpoint[256], host[128], port[16], camera_id[128], camera_key[128], interval_text[16];
     unsigned int interval = 1;
-    if (detach_from_boot_shell() != 0) return 0;
+    signal(SIGHUP, SIG_IGN);
     signal(SIGTERM, stop_streamer);
     signal(SIGINT, stop_streamer);
     while (running) {
