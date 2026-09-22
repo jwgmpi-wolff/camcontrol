@@ -15,12 +15,10 @@ class Camera {
         type: json['type'] as String,
       );
 
-  /// Cameras without RTSP need a slower poll interval: the fallback
-  /// mmap-scrape mechanism is a best-effort snapshot, not a live feed, and
-  /// a single fetch can itself take several seconds over the camera's slow
-  /// embedded SSH implementation.
+    /// Gateway-backed Hi3518e previews are supplied by the LAN relay, so the
+    /// mobile client can safely poll at the same cadence as current snapshots.
   Duration get recommendedPollInterval =>
-      type == 'rtsp' ? const Duration(seconds: 1) : const Duration(seconds: 15);
+      type == 'rtsp' ? const Duration(seconds: 1) : const Duration(seconds: 2);
 }
 
 class DiscoveredCamera {
