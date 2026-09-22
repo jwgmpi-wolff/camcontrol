@@ -169,18 +169,6 @@ class AppState extends ChangeNotifier {
       _profilesNeedSaving = true;
     }
     _activeIndex = _prefs.getInt('activeProfileIndex') ?? 0;
-    if (_prefs.getBool('remoteCameraProfileSelected') != true) {
-      _activeIndex = profiles.indexWhere(
-        (profile) => profile.name == _remoteCameraProfileName,
-      );
-      _profilesNeedSaving = true;
-    }
-    if (_prefs.getBool('localCameraProfileSelected') != true) {
-      _activeIndex = profiles.indexWhere(
-        (profile) => profile.name == _localCameraProfileName,
-      );
-      _profilesNeedSaving = true;
-    }
     if (_activeIndex < 0 || _activeIndex >= profiles.length) _activeIndex = 0;
   }
 
@@ -230,8 +218,6 @@ class AppState extends ChangeNotifier {
     await _entraAuth.initialize();
     if (_profilesNeedSaving) {
       await _saveProfiles();
-      await _prefs.setBool('remoteCameraProfileSelected', true);
-      await _prefs.setBool('localCameraProfileSelected', true);
       _profilesNeedSaving = false;
     }
     if (_entraAuth.username.isNotEmpty) {
