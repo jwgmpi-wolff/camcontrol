@@ -22,12 +22,19 @@ class ApiService {
   final Future<String> Function() _token;
 
   Future<Map<String, String>> authHeaders() async {
-    final token = await _token();
     final key = _apiKey();
+    // App Service Easy Auth can reject an expired bearer token before the
+    // gateway sees a valid API key. Gateway profiles use the API-key path.
+    if (key.isNotEmpty) {
+      return {
+        'Content-Type': 'application/json',
+        'X-API-Key': key,
+      };
+    }
+    final token = await _token();
     return {
       'Content-Type': 'application/json',
       if (token.isNotEmpty) 'Authorization': 'Bearer $token',
-      if (key.isNotEmpty) 'X-API-Key': key,
     };
   }
 
