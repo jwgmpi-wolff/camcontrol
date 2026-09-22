@@ -47,3 +47,15 @@ def test_configured_cameras_parses_multiple_camera_urls(monkeypatch):
         ("yhs3017-1", "http://10.0.0.246/live.jpg"),
         ("yhs3017-2", "http://10.0.0.252/live.jpg"),
     ]
+
+
+def test_configured_cameras_accepts_ssh_preview_sources(monkeypatch):
+    monkeypatch.setenv(
+        "CAMCONTROL_RELAY_CAMERAS",
+        "yhs3017-1=ssh://10.0.0.246,yhs3017-2=ssh://10.0.0.252",
+    )
+
+    assert configured_cameras() == [
+        ("yhs3017-1", "ssh://10.0.0.246"),
+        ("yhs3017-2", "ssh://10.0.0.252"),
+    ]

@@ -7,8 +7,10 @@ import hashlib
 import hmac
 import logging
 import os
+from urllib.parse import urlparse
 
 import httpx
+import paramiko
 import uvicorn
 from fastapi import FastAPI, Header, HTTPException, Request
 
@@ -59,6 +61,29 @@ def configured_cameras() -> list[tuple[str, str]]:
     return [(camera_id, camera_url)] if camera_id and camera_url else []
 
 
+def _read_ssh_preview(camera_url: str) -> bytes:
+    parsed = urlparse(camera_url)
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    client.connect(
+        hostname=parsed.hostname,
+        port=parsed.port or 22,
+        username=parsed.username or os.environ.get("CAMCONTROL_RELAY_SSH_USER", "root"),
+        password=os.environ.get("CAMCONTROL_RELAY_SSH_PASSWORD", ""),
+        timeout=15,
+        banner_timeout=15,
+        auth_timeout=15,
+        look_for_keys=False,
+        allow_agent=False,
+    )
+    try:
+        _stdin, stdout, _stderr = client.exec_command("cat /tmp/view", timeout=20)
+        stdout.channel.settimeout(20)
+        return stdout.read()
+    finally:
+        client.close()
+
+
 async def poll_camera(camera_id: str, camera_url: str) -> None:
     master_key = os.environ.get("CAMCONTROL_API_KEY", "")
     if not master_key:
@@ -68,9 +93,13 @@ async def poll_camera(camera_id: str, camera_url: str) -> None:
     async with httpx.AsyncClient(timeout=15) as client:
         while True:
             try:
-                response = await client.get(camera_url)
-                response.raise_for_status()
-                await forward_snapshot(camera_id, response.content, camera_key)
+                if camera_url.startswith("ssh://"):
+                    payload = await asyncio.to_thread(_read_ssh_preview, camera_url)
+                else:
+                    response = await client.get(camera_url)
+                    response.raise_for_status()
+                    payload = response.content
+                await forward_snapshot(camera_id, payload, camera_key)
             except httpx.HTTPError:
                 logger.warning("Camera relay poll failed", exc_info=True)
             await asyncio.sleep(interval)
