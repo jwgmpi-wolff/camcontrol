@@ -103,6 +103,9 @@ class AppState extends ChangeNotifier {
   String? authenticationError;
   String? connectionError;
   List<Camera> cameras = [];
+  int _cameraRefreshRevision = 0;
+
+  int get cameraRefreshRevision => _cameraRefreshRevision;
 
   void _loadProfiles() {
     final raw = _prefs.getString('gatewayProfiles');
@@ -270,6 +273,7 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> refreshCameras() async {
+    _cameraRefreshRevision++;
     if (isDirectMode) {
       // No gateway to poll -- the direct camera view fetches its own frames.
       status = 'ok';

@@ -36,7 +36,7 @@ class MultiViewScreen extends StatelessWidget {
               controller: hostCtrl,
               decoration: const InputDecoration(
                 labelText: 'Address (IP or DDNS)',
-                hintText: '192.168.1.50 or myhome.duckdns.org:8080',
+                hintText: '192.168.1.50 or myhome.duckdns.org:21416',
               ),
               keyboardType: TextInputType.url,
               autocorrect: false,
@@ -129,7 +129,12 @@ class MultiViewScreen extends StatelessWidget {
                       ),
                       itemCount: state.cameras.length,
                       itemBuilder: (context, i) =>
-                          CameraTile(camera: state.cameras[i]),
+                          CameraTile(
+                            key: ValueKey(
+                              '${state.cameraRefreshRevision}-${state.cameras[i].id}',
+                            ),
+                            camera: state.cameras[i],
+                          ),
                     );
                   },
                 ),
