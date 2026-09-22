@@ -323,13 +323,21 @@ async def discover_cameras(_: str = Depends(_require_auth)) -> list[DiscoveredCa
 def get_snapshot(camera_id: str, _: str = Depends(_require_auth)) -> Response:
     pushed = state.pushed_snapshots.get(camera_id)
     if pushed is not None:
-        return Response(content=pushed, media_type="image/jpeg")
+        return Response(
+            content=pushed,
+            media_type="image/jpeg",
+            headers={"Cache-Control": "no-store, max-age=0"},
+        )
     backend = state.capture_backend_for(camera_id)
     try:
         jpeg = backend.get_snapshot()
     except CaptureError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
-    return Response(content=jpeg, media_type="image/jpeg")
+    return Response(
+        content=jpeg,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "no-store, max-age=0"},
+    )
 
 
 @app.post("/api/cameras/{camera_id}/push-snapshot")

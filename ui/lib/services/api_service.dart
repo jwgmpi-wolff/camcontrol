@@ -80,7 +80,15 @@ class ApiService {
   /// slow retries server-side, so this allows a generous ceiling.
   Future<Uint8List> fetchSnapshot(String cameraId) async {
     final res = await http
-        .get(_uri('/api/cameras/$cameraId/snapshot'), headers: await authHeaders())
+        .get(
+          _uri('/api/cameras/$cameraId/snapshot', {
+            'refresh': DateTime.now().microsecondsSinceEpoch.toString(),
+          }),
+          headers: {
+            ...await authHeaders(),
+            'Cache-Control': 'no-cache',
+          },
+        )
         .timeout(const Duration(seconds: 60));
     _check(res);
     return res.bodyBytes;
