@@ -7,6 +7,7 @@ import hashlib
 import hmac
 import logging
 import os
+import threading
 from urllib.parse import urlparse
 
 import httpx
@@ -19,6 +20,8 @@ DEFAULT_TARGET = "https://camcontrol-wolff.azurewebsites.net"
 
 app = FastAPI(title="CamControl LAN Relay")
 logger = logging.getLogger(__name__)
+_ssh_clients: dict[str, paramiko.SSHClient] = {}
+_ssh_clients_lock = threading.Lock()
 
 
 def camera_key_is_valid(camera_id: str, camera_key: str | None, master_key: str) -> bool:
@@ -61,7 +64,7 @@ def configured_cameras() -> list[tuple[str, str]]:
     return [(camera_id, camera_url)] if camera_id and camera_url else []
 
 
-def _read_ssh_preview(camera_url: str) -> bytes:
+def _connect_ssh_preview(camera_url: str) -> paramiko.SSHClient:
     parsed = urlparse(camera_url)
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -76,12 +79,27 @@ def _read_ssh_preview(camera_url: str) -> bytes:
         look_for_keys=False,
         allow_agent=False,
     )
+    return client
+
+
+def _read_ssh_preview(camera_url: str) -> bytes:
+    with _ssh_clients_lock:
+        client = _ssh_clients.get(camera_url)
+        if client is None or not client.get_transport() or not client.get_transport().is_active():
+            if client is not None:
+                client.close()
+            client = _connect_ssh_preview(camera_url)
+            _ssh_clients[camera_url] = client
     try:
         _stdin, stdout, _stderr = client.exec_command("cat /tmp/view", timeout=20)
         stdout.channel.settimeout(20)
         return stdout.read()
-    finally:
+    except Exception:
+        with _ssh_clients_lock:
+            if _ssh_clients.get(camera_url) is client:
+                _ssh_clients.pop(camera_url, None)
         client.close()
+        raise
 
 
 async def poll_camera(camera_id: str, camera_url: str) -> None:

@@ -371,10 +371,12 @@ def capture_and_store(
     camera_id: str, _: str = Depends(_require_auth)
 ) -> CaptureResult:
     backend = state.capture_backend_for(camera_id)
-    try:
-        jpeg = backend.get_snapshot()
-    except CaptureError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    jpeg = state.pushed_snapshots.get(camera_id)
+    if jpeg is None:
+        try:
+            jpeg = backend.get_snapshot()
+        except CaptureError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     ts = datetime.now(timezone.utc)
     key = f"{camera_id}/{ts:%Y/%m/%d}/{int(time.time() * 1000)}.jpg"
