@@ -44,6 +44,13 @@ def _gateway_api_key() -> str:
     return os.environ.get("CAMCONTROL_API_KEY") or os.environ.get("API_KEY", "")
 
 
+def _complete_jpeg(payload: bytes) -> bytes:
+    """Repair camera JPEG streams that omit the terminal EOI marker."""
+    if payload.startswith(b"\xff\xd8") and not payload.endswith(b"\xff\xd9"):
+        return payload + b"\xff\xd9"
+    return payload
+
+
 class _GatewayState:
     def __init__(self) -> None:
         self.config_path = DEFAULT_CONFIG_PATH
@@ -342,7 +349,7 @@ async def push_snapshot(
     if not payload or len(payload) > 8 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="Invalid snapshot payload")
     if payload.startswith(b"\xff\xd8"):
-        state.pushed_snapshots[camera_id] = payload
+        state.pushed_snapshots[camera_id] = _complete_jpeg(payload)
     else:
         try:
             state.pushed_snapshots[camera_id] = decode_h264_to_jpeg(payload)
