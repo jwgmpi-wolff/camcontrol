@@ -118,8 +118,10 @@ int main(void) {
             parse_endpoint(endpoint, host, sizeof(host), port, sizeof(port)) == 0) {
             if (config_value("push_interval_seconds", interval_text, sizeof(interval_text)) == 0) {
                 interval = (unsigned int)strtoul(interval_text, NULL, 10);
-                if (interval == 0) interval = 1;
             }
+            /* The overlay owns a local wired/LAN hop; cap legacy uploader
+             * settings at one second so it provides the low-latency path. */
+            if (interval == 0 || interval > 1) interval = 1;
             send_frame(host, port, camera_id, camera_key);
         }
         sleep(interval);
