@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../main.dart';
 import '../models/camera.dart';
-import 'camera_edit_screen.dart';
+import '../services/local_camera_discovery.dart';
 
 /// Scans the local network for candidate cameras (open SSH/HTTP/RTSP ports)
 /// so the user doesn't have to type IP addresses in by hand.
@@ -22,7 +22,7 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
   Future<void> _scan() async {
     setState(() { _scanning = true; _error = null; _results = []; });
     try {
-      final results = await context.read<AppState>().api.discoverCameras();
+      final results = await LocalCameraDiscovery().scan();
       setState(() => _results = results);
     } catch (e) {
       setState(() => _error = e.toString());
@@ -94,17 +94,16 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
             '${result.fingerprint}\nOpen ports: ${result.openPorts.join(', ')}',
           ),
           isThreeLine: true,
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => CameraEditScreen(
-                prefillType: result.suggestedType == 'unknown'
-                    ? 'hi3518e_ssh'
-                    : result.suggestedType,
-                prefillHost: result.ip,
-              ),
-            ),
+          trailing: IconButton(
+            icon: const Icon(Icons.add_circle_outline),
+            tooltip: 'Add to local dashboard',
+            onPressed: () async {
+              await context.read<AppState>().addLocalDiscoveredCamera(
+                    result.suggestedName,
+                    result.ip,
+                  );
+              if (context.mounted) Navigator.pop(context);
+            },
           ),
         );
       },

@@ -70,6 +70,32 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> addLocalDiscoveredCamera(String name, String host) async {
+    var localIndex = profiles.indexWhere(
+      (profile) => profile.name == _localCameraProfileName,
+    );
+    if (localIndex == -1) {
+      profiles.add(GatewayProfile(
+        name: _localCameraProfileName,
+        baseUrl: '',
+        mode: 'direct',
+      ));
+      localIndex = profiles.length - 1;
+    }
+    final localProfile = profiles[localIndex];
+    if (!localProfile.directCameras.any((camera) => camera.host == host)) {
+      localProfile.directCameras.add(DirectCamera(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        name: name,
+        host: host,
+      ));
+    }
+    _activeIndex = localIndex;
+    await _saveProfiles();
+    notifyListeners();
+    await refreshCameras();
+  }
+
   Future<void> updateDirectCamera(
     String id, {
     required String name,
