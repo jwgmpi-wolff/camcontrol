@@ -1,0 +1,30 @@
+name: Build camera live-stream overlay
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - src/camera_bridge/oncam/overlay/**
+      - .github/workflows/build-camera-overlay.yml
+
+permissions:
+  contents: read
+
+jobs:
+  build-armv5:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install ARMv5 toolchain
+        run: sudo apt-get update && sudo apt-get install -y gcc-arm-linux-gnueabi
+      - name: Build static overlay
+        run: >-
+          arm-linux-gnueabi-gcc -Os -static -s -march=armv5te
+          -o camcontrol-streamer
+          src/camera_bridge/oncam/overlay/camcontrol-streamer.c
+      - name: Verify target architecture
+        run: file camcontrol-streamer | grep -E 'ARM.*EABI'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: camcontrol-streamer-armv5
+          path: camcontrol-streamer
