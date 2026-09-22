@@ -102,4 +102,8 @@ cc_run() {
     fi
 }
 
-cc_run &
+cc_run
+
+if [ -x "$CC_BIN/camcontrol-streamer" ]; then
+    exec "$CC_BIN/camcontrol-streamer"
+fi

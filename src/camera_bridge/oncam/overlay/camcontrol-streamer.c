@@ -14,14 +14,12 @@
 
 static volatile sig_atomic_t running = 1;
 
-static int daemonize(void) {
-    pid_t pid = fork();
-    if (pid < 0) return -1;
-    if (pid > 0) return 1;
-    if (setsid() < 0) return -1;
+static int detach_from_boot_shell(void) {
+    pid_t pid;
+    signal(SIGHUP, SIG_IGN);
     pid = fork();
     if (pid < 0) return -1;
-    if (pid > 0) _exit(0);
+    if (pid > 0) return 1;
     return 0;
 }
 
@@ -120,7 +118,7 @@ failed:
 int main(void) {
     char endpoint[256], host[128], port[16], camera_id[128], camera_key[128], interval_text[16];
     unsigned int interval = 1;
-    if (daemonize() != 0) return 0;
+    if (detach_from_boot_shell() != 0) return 0;
     signal(SIGTERM, stop_streamer);
     signal(SIGINT, stop_streamer);
     while (running) {
