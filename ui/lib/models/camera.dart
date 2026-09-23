@@ -18,7 +18,7 @@ class Camera {
     /// Gateway-backed Hi3518e previews are supplied by the LAN relay, so the
     /// mobile client can safely poll at the same cadence as current snapshots.
   Duration get recommendedPollInterval =>
-      type == 'rtsp' ? const Duration(seconds: 1) : const Duration(seconds: 2);
+      const Duration(seconds: 1);
 }
 
 class DiscoveredCamera {
