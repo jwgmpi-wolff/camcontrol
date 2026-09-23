@@ -42,6 +42,7 @@ class AppState extends ChangeNotifier {
   int _activeIndex = 0;
   bool _profilesNeedSaving = false;
   int _pollIntervalSeconds = 0; // 0 = use each camera's own default
+  final Completer<void> _initialized = Completer<void>();
 
   GatewayProfile get activeProfile => profiles[_activeIndex];
   int get activeProfileIndex => _activeIndex;
@@ -50,6 +51,8 @@ class AppState extends ChangeNotifier {
   String get apiKey => profiles.isEmpty ? '' : activeProfile.apiKey;
   String get username => profiles.isEmpty ? '' : activeProfile.username;
   bool get isSignedIn => username.isNotEmpty;
+
+  Future<void> get ready => _initialized.future;
 
   /// True when the active profile connects straight to cameras' own IPs,
   /// bypassing the camera_bridge gateway entirely.
@@ -244,16 +247,20 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> initialize() async {
-    await _entraAuth.initialize();
-    if (_profilesNeedSaving) {
-      await _saveProfiles();
-      _profilesNeedSaving = false;
+    try {
+      await _entraAuth.initialize();
+      if (_profilesNeedSaving) {
+        await _saveProfiles();
+        _profilesNeedSaving = false;
+      }
+      if (_entraAuth.username.isNotEmpty) {
+        activeProfile.username = _entraAuth.username;
+        await _saveProfiles();
+      }
+      await refreshCameras();
+    } finally {
+      if (!_initialized.isCompleted) _initialized.complete();
     }
-    if (_entraAuth.username.isNotEmpty) {
-      activeProfile.username = _entraAuth.username;
-      await _saveProfiles();
-    }
-    await refreshCameras();
   }
 
   Future<void> login() async {
@@ -378,12 +385,14 @@ class _MainShellState extends State<MainShell> {
     } catch (_) {
       // No initial link (cold start without a deep link) -- nothing to do.
     }
-    _linkSub = appLinks.uriLinkStream.listen(_handleDeepLink);
+    _linkSub = appLinks.uriLinkStream.listen((uri) {
+      _handleDeepLink(uri);
+    });
   }
 
   /// `camcontrol://configure?url=<gateway-url>&key=<api-key>&name=<profile-name>`
   /// Provisions (or updates) a Gateway profile without the user typing it in.
-  void _handleDeepLink(Uri uri) {
+  Future<void> _handleDeepLink(Uri uri) async {
     if (!mounted) return;
     if (uri.scheme != 'camcontrol' || uri.host != 'configure') return;
     final url = uri.queryParameters['url'];
@@ -391,6 +400,8 @@ class _MainShellState extends State<MainShell> {
     final apiKey = uri.queryParameters['key'] ?? '';
     final name = uri.queryParameters['name'] ?? 'Azure';
     final state = context.read<AppState>();
+    await state.ready;
+    if (!mounted) return;
     final existingIndex =
         state.profiles.indexWhere((p) => p.baseUrl == url && !p.isDirect);
     state
