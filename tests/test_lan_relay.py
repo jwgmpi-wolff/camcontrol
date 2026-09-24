@@ -5,7 +5,12 @@ from __future__ import annotations
 import hashlib
 import hmac
 
-from camera_bridge.lan_relay import camera_key_for, camera_key_is_valid, configured_cameras
+from camera_bridge.lan_relay import (
+    camera_key_for,
+    camera_key_is_accepted,
+    camera_key_is_valid,
+    configured_cameras,
+)
 
 
 def test_camera_key_validation_accepts_derived_key():
@@ -35,6 +40,11 @@ def test_camera_key_for_matches_the_gateway_derivation():
     assert camera_key_for("yhs3017-1", master_key) == hmac.new(
         master_key.encode(), b"yhs3017-1", hashlib.sha256
     ).hexdigest()
+
+
+def test_relay_defers_validation_to_gateway_without_local_master_key():
+    assert camera_key_is_accepted("yhs3017-1", "camera-provided-key", "")
+    assert not camera_key_is_accepted("yhs3017-1", None, "")
 
 
 def test_configured_cameras_parses_multiple_camera_urls(monkeypatch):

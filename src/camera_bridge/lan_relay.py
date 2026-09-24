@@ -31,6 +31,14 @@ def camera_key_is_valid(camera_id: str, camera_key: str | None, master_key: str)
     return bool(master_key and camera_key) and hmac.compare_digest(camera_key, expected)
 
 
+def camera_key_is_accepted(
+    camera_id: str, camera_key: str | None, master_key: str
+) -> bool:
+    if not camera_key:
+        return False
+    return not master_key or camera_key_is_valid(camera_id, camera_key, master_key)
+
+
 def camera_key_for(camera_id: str, master_key: str) -> str:
     return hmac.new(master_key.encode(), camera_id.encode(), hashlib.sha256).hexdigest()
 
@@ -38,7 +46,7 @@ def camera_key_for(camera_id: str, master_key: str) -> str:
 async def forward_snapshot(camera_id: str, payload: bytes, camera_key: str) -> None:
     target = os.environ.get("CAMCONTROL_RELAY_TARGET", DEFAULT_TARGET).rstrip("/")
     target_url = f"{target}/api/cameras/{camera_id}/push-snapshot"
-    async with httpx.AsyncClient(timeout=30) as client:
+    async with httpx.AsyncClient(timeout=90) as client:
         response = await client.post(
             target_url,
             content=payload,
@@ -136,7 +144,7 @@ async def push_snapshot(
     x_camera_key: str | None = Header(default=None),
 ) -> dict[str, str]:
     master_key = os.environ.get("CAMCONTROL_API_KEY", "")
-    if not camera_key_is_valid(camera_id, x_camera_key, master_key):
+    if not camera_key_is_accepted(camera_id, x_camera_key, master_key):
         raise HTTPException(status_code=401, detail="Invalid camera credentials")
 
     payload = await request.body()
