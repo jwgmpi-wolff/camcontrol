@@ -7,6 +7,8 @@ import 'package:provider/provider.dart';
 
 import '../main.dart';
 import '../models/direct_camera.dart';
+import '../utils/feed_health_monitor.dart';
+import '../widgets/feed_health_indicator.dart';
 import 'direct_camera_view.dart';
 
 /// A single gateway-less camera's live-polling preview tile, used in the
@@ -27,6 +29,7 @@ class _DirectCameraTileState extends State<DirectCameraTile>
   Uint8List? _frame;
   String? _error;
   bool _fetching = false;
+  late final FeedHealthMonitor _health;
 
   // Users often paste a full browser URL (e.g. "10.0.0.252/live.html") --
   // extract just the host[:port] regardless of scheme/path they included.
@@ -54,22 +57,40 @@ class _DirectCameraTileState extends State<DirectCameraTile>
   }
 
   Future<void> _poll() async {
-    if (_fetching || !mounted) return;
+    if (!mounted) return;
+    if (_fetching) {
+      setState(() {});
+      return;
+    }
     final host = _host;
     if (host.isEmpty) {
-      setState(() { _error = 'No address set'; _frame = null; });
+      _health.recordFailure();
+      setState(() {
+        _error = 'No address set';
+        _frame = null;
+      });
       return;
     }
     _fetching = true;
     try {
       final res = await _httpClient
-          .get(Uri.parse(
-              'http://$host/live.jpg?t=${DateTime.now().millisecondsSinceEpoch}'))
+          .get(
+            Uri.parse(
+              'http://$host/live.jpg?t=${DateTime.now().millisecondsSinceEpoch}',
+            ),
+          )
           .timeout(const Duration(seconds: 10));
       if (res.statusCode != 200) throw Exception('HTTP ${res.statusCode}');
-      if (mounted) setState(() { _frame = res.bodyBytes; _error = null; });
+      if (mounted) {
+        _health.recordFrame(res.bodyBytes);
+        setState(() {
+          _frame = res.bodyBytes;
+          _error = null;
+        });
+      }
     } catch (e) {
       if (mounted) {
+        _health.recordFailure();
         _httpClient.close();
         _httpClient = http.Client();
         setState(() => _error = 'Unreachable');
@@ -82,6 +103,7 @@ class _DirectCameraTileState extends State<DirectCameraTile>
   @override
   void initState() {
     super.initState();
+    _health = FeedHealthMonitor.forPollInterval(_pollInterval(context));
     WidgetsBinding.instance.addObserver(this);
     _startPolling();
   }
@@ -97,7 +119,10 @@ class _DirectCameraTileState extends State<DirectCameraTile>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused) _stopPolling();
-    if (state == AppLifecycleState.resumed && _timer == null) _startPolling();
+    if (state == AppLifecycleState.resumed && _timer == null) {
+      _health.resume();
+      _startPolling();
+    }
   }
 
   Future<void> _showEditDialog() async {
@@ -186,11 +211,7 @@ class _DirectCameraTileState extends State<DirectCameraTile>
                     visualDensity: VisualDensity.compact,
                     onPressed: _showEditDialog,
                   ),
-                  Icon(
-                    _error == null ? Icons.circle : Icons.error,
-                    size: 10,
-                    color: _error == null ? Colors.green : Colors.red,
-                  ),
+                  FeedHealthIndicator(health: _health.status()),
                 ],
               ),
             ),
@@ -201,6 +222,10 @@ class _DirectCameraTileState extends State<DirectCameraTile>
   }
 
   Widget _buildImage() {
+    final health = _health.status();
+    if (_frame != null && health != FeedHealth.live) {
+      return FeedUnavailable(health: health, detail: _error);
+    }
     if (_frame == null && _error == null) {
       return const Center(
         child: SizedBox(

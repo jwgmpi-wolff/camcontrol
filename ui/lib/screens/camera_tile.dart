@@ -6,6 +6,8 @@ import 'package:provider/provider.dart';
 
 import '../main.dart';
 import '../models/camera.dart';
+import '../utils/feed_health_monitor.dart';
+import '../widgets/feed_health_indicator.dart';
 
 /// A single camera's live-polling preview tile, used inside the multi-view
 /// grid. Each tile polls independently at a rate suited to its camera type.
@@ -25,6 +27,7 @@ class _CameraTileState extends State<CameraTile> with WidgetsBindingObserver {
   bool _fetching = false;
   bool _recording = false;
   bool _busy = false;
+  late final FeedHealthMonitor _health;
 
   Duration _pollInterval(BuildContext context) {
     final override = context.read<AppState>().pollIntervalSeconds;
@@ -44,14 +47,27 @@ class _CameraTileState extends State<CameraTile> with WidgetsBindingObserver {
   }
 
   Future<void> _poll() async {
-    if (_fetching || !mounted) return;
+    if (!mounted) return;
+    if (_fetching) {
+      setState(() {});
+      return;
+    }
     _fetching = true;
     try {
       final api = context.read<AppState>().api;
       final bytes = await api.fetchSnapshot(widget.camera.id);
-      if (mounted) setState(() { _frame = bytes; _error = null; });
+      if (mounted) {
+        _health.recordFrame(bytes);
+        setState(() {
+          _frame = bytes;
+          _error = null;
+        });
+      }
     } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
+      if (mounted) {
+        _health.recordFailure();
+        setState(() => _error = e.toString());
+      }
     } finally {
       _fetching = false;
     }
@@ -81,10 +97,14 @@ class _CameraTileState extends State<CameraTile> with WidgetsBindingObserver {
     try {
       if (_recording) {
         await api.stopRecording(widget.camera.id);
-        messenger.showSnackBar(const SnackBar(content: Text('Recording stopped')));
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Recording stopped')),
+        );
       } else {
         await api.startRecording(widget.camera.id);
-        messenger.showSnackBar(const SnackBar(content: Text('Recording started')));
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Recording started')),
+        );
       }
       if (mounted) setState(() => _recording = !_recording);
     } catch (e) {
@@ -97,6 +117,7 @@ class _CameraTileState extends State<CameraTile> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    _health = FeedHealthMonitor.forPollInterval(_pollInterval(context));
     WidgetsBinding.instance.addObserver(this);
     _startPolling();
   }
@@ -111,7 +132,10 @@ class _CameraTileState extends State<CameraTile> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused) _stopPolling();
-    if (state == AppLifecycleState.resumed && _timer == null) _startPolling();
+    if (state == AppLifecycleState.resumed && _timer == null) {
+      _health.resume();
+      _startPolling();
+    }
   }
 
   // Some camera types (the SSH mmap-scrape fallback) don't have a documented,
@@ -154,12 +178,10 @@ class _CameraTileState extends State<CameraTile> with WidgetsBindingObserver {
                   visualDensity: VisualDensity.compact,
                   onPressed: _busy ? null : _toggleRecording,
                 ),
-                Icon(
-                  _error == null ? Icons.circle : Icons.error,
-                  size: 10,
-                  color: _error == null
-                      ? Colors.green
-                      : (_isLiveViewUnavailable ? Colors.grey : Colors.red),
+                FeedHealthIndicator(
+                  health: _isLiveViewUnavailable
+                      ? FeedHealth.connecting
+                      : _health.status(),
                 ),
               ],
             ),
@@ -170,6 +192,10 @@ class _CameraTileState extends State<CameraTile> with WidgetsBindingObserver {
   }
 
   Widget _buildImage() {
+    final health = _health.status();
+    if (_frame != null && health != FeedHealth.live) {
+      return FeedUnavailable(health: health, detail: _error);
+    }
     if (_frame == null && _error == null) {
       return const Center(
         child: SizedBox(

@@ -39,6 +39,8 @@ from .voice_message import (
 
 app = FastAPI(title="CamControl Gateway")
 
+_PUSHED_SNAPSHOT_MAX_AGE_SECONDS = 30.0
+
 
 def _gateway_api_key() -> str:
     return os.environ.get("CAMCONTROL_API_KEY") or os.environ.get("API_KEY", "")
@@ -62,8 +64,30 @@ class _GatewayState:
         self._live_view_publishers: dict[str, LiveViewPublisher] = {}
         self.camera_announcements: dict[str, dict] = {}
         self.pushed_snapshots: dict[str, bytes] = {}
+        self._pushed_snapshot_times: dict[str, float] = {}
         self.users = UserStore(DEFAULT_USERS_PATH)
         self.tokens = TokenManager()
+
+    def remember_pushed_snapshot(self, camera_id: str, jpeg: bytes) -> None:
+        self.pushed_snapshots[camera_id] = jpeg
+        self._pushed_snapshot_times[camera_id] = time.monotonic()
+
+    def fresh_pushed_snapshot(self, camera_id: str) -> bytes | None:
+        jpeg = self.pushed_snapshots.get(camera_id)
+        received_at = self._pushed_snapshot_times.get(camera_id)
+        if jpeg is None or received_at is None:
+            return None
+        if time.monotonic() - received_at > _PUSHED_SNAPSHOT_MAX_AGE_SECONDS:
+            self.pushed_snapshots.pop(camera_id, None)
+            self._pushed_snapshot_times.pop(camera_id, None)
+            return None
+        return jpeg
+
+    def request_snapshot_refresh(self) -> int:
+        invalidated = len(self.pushed_snapshots)
+        self.pushed_snapshots.clear()
+        self._pushed_snapshot_times.clear()
+        return invalidated
 
     def capture_backend_for(self, camera_id: str) -> CaptureBackend:
         backend = self._capture_backends.get(camera_id)
@@ -138,6 +162,8 @@ class _GatewayState:
         self._recording_sessions.clear()
         self.config = config
         self._capture_backends.clear()
+        self.pushed_snapshots.clear()
+        self._pushed_snapshot_times.clear()
         self._storage_backend = None
         save_config(config, self.config_path)
         self.start_motion_watchers()
@@ -275,6 +301,16 @@ def list_cameras(_: str = Depends(_require_auth)) -> list[CameraSummary]:
     ]
 
 
+@app.post("/api/cameras/refresh")
+def refresh_camera_snapshots(_: str = Depends(_require_auth)) -> dict:
+    invalidated = state.request_snapshot_refresh()
+    return {
+        "status": "refresh_requested",
+        "cameras": len(state.config.cameras),
+        "snapshots_invalidated": invalidated,
+    }
+
+
 @app.get("/api/cameras/{camera_id}/motion", response_model=MotionStatus)
 def get_motion_status(camera_id: str, _: str = Depends(_require_auth)) -> MotionStatus:
     for camera in state.config.cameras:
@@ -321,7 +357,7 @@ async def discover_cameras(_: str = Depends(_require_auth)) -> list[DiscoveredCa
 
 @app.get("/api/cameras/{camera_id}/snapshot")
 def get_snapshot(camera_id: str, _: str = Depends(_require_auth)) -> Response:
-    pushed = state.pushed_snapshots.get(camera_id)
+    pushed = state.fresh_pushed_snapshot(camera_id)
     if pushed is not None:
         return Response(
             content=pushed,
@@ -357,10 +393,10 @@ async def push_snapshot(
     if not payload or len(payload) > 8 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="Invalid snapshot payload")
     if payload.startswith(b"\xff\xd8"):
-        state.pushed_snapshots[camera_id] = _complete_jpeg(payload)
+        state.remember_pushed_snapshot(camera_id, _complete_jpeg(payload))
     else:
         try:
-            state.pushed_snapshots[camera_id] = decode_h264_to_jpeg(payload)
+            state.remember_pushed_snapshot(camera_id, decode_h264_to_jpeg(payload))
         except H264DecodeError as exc:
             raise HTTPException(status_code=422, detail="No decodable camera frame") from exc
     return {"status": "ok"}
@@ -371,7 +407,7 @@ def capture_and_store(
     camera_id: str, _: str = Depends(_require_auth)
 ) -> CaptureResult:
     backend = state.capture_backend_for(camera_id)
-    jpeg = state.pushed_snapshots.get(camera_id)
+    jpeg = state.fresh_pushed_snapshot(camera_id)
     if jpeg is None:
         try:
             jpeg = backend.get_snapshot()

@@ -78,20 +78,24 @@ class AppState extends ChangeNotifier {
       (profile) => profile.name == _localCameraProfileName,
     );
     if (localIndex == -1) {
-      profiles.add(GatewayProfile(
-        name: _localCameraProfileName,
-        baseUrl: '',
-        mode: 'direct',
-      ));
+      profiles.add(
+        GatewayProfile(
+          name: _localCameraProfileName,
+          baseUrl: '',
+          mode: 'direct',
+        ),
+      );
       localIndex = profiles.length - 1;
     }
     final localProfile = profiles[localIndex];
     if (!localProfile.directCameras.any((camera) => camera.host == host)) {
-      localProfile.directCameras.add(DirectCamera(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        name: name,
-        host: host,
-      ));
+      localProfile.directCameras.add(
+        DirectCamera(
+          id: DateTime.now().millisecondsSinceEpoch.toString(),
+          name: name,
+          host: host,
+        ),
+      );
     }
     _activeIndex = localIndex;
     await _saveProfiles();
@@ -107,7 +111,11 @@ class AppState extends ChangeNotifier {
     if (profiles.isEmpty) return;
     final idx = activeProfile.directCameras.indexWhere((c) => c.id == id);
     if (idx == -1) return;
-    activeProfile.directCameras[idx] = DirectCamera(id: id, name: name, host: host);
+    activeProfile.directCameras[idx] = DirectCamera(
+      id: id,
+      name: name,
+      host: host,
+    );
     await _saveProfiles();
     notifyListeners();
   }
@@ -146,9 +154,12 @@ class AppState extends ChangeNotifier {
     }
     if (profiles.isEmpty) {
       // Migrate the old single baseUrl/apiKey prefs into a "Local" profile.
-      final legacyUrl = _prefs.getString('baseUrl') ?? 'http://192.168.1.x:21416';
+      final legacyUrl =
+          _prefs.getString('baseUrl') ?? 'http://192.168.1.x:21416';
       final legacyKey = _prefs.getString('apiKey') ?? '';
-      profiles = [GatewayProfile(name: 'Local', baseUrl: legacyUrl, apiKey: legacyKey)];
+      profiles = [
+        GatewayProfile(name: 'Local', baseUrl: legacyUrl, apiKey: legacyKey),
+      ];
     }
     final remoteProfileIndex = profiles.indexWhere(
       (profile) => profile.name == _remoteCameraProfileName,
@@ -238,7 +249,9 @@ class AppState extends ChangeNotifier {
     if (index < 0 || index >= profiles.length) return;
     profiles.removeAt(index);
     if (profiles.isEmpty) {
-      profiles = [GatewayProfile(name: 'Local', baseUrl: 'http://192.168.1.x:21416')];
+      profiles = [
+        GatewayProfile(name: 'Local', baseUrl: 'http://192.168.1.x:21416'),
+      ];
     }
     if (_activeIndex >= profiles.length) _activeIndex = 0;
     await _saveProfiles();
@@ -305,7 +318,7 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> refreshCameras() async {
+  Future<void> refreshCameras({bool requestFreshImages = false}) async {
     _cameraRefreshRevision++;
     if (isDirectMode) {
       // No gateway to poll -- the direct camera view fetches its own frames.
@@ -315,6 +328,9 @@ class AppState extends ChangeNotifier {
       return;
     }
     try {
+      if (requestFreshImages) {
+        await api.requestCameraRefresh();
+      }
       await api.health();
       cameras = await api.listCameras();
       status = 'ok';
@@ -324,8 +340,9 @@ class AppState extends ChangeNotifier {
       status = error.status == 401 || error.status == 403
           ? 'authenticationRequired'
           : 'unreachable';
-      authenticationError =
-          error.status == 401 || error.status == 403 ? 'Gateway returned HTTP ${error.status}' : null;
+      authenticationError = error.status == 401 || error.status == 403
+          ? 'Gateway returned HTTP ${error.status}'
+          : null;
       connectionError = error.status == 401 || error.status == 403
           ? null
           : '${error.runtimeType}: ${error.message}';
@@ -337,8 +354,11 @@ class AppState extends ChangeNotifier {
     }
     notifyListeners();
   }
-}
 
+  Future<void> forceRefreshCameras() async {
+    await refreshCameras(requestFreshImages: true);
+  }
+}
 
 class CamControlApp extends StatelessWidget {
   const CamControlApp({super.key});
@@ -402,16 +422,19 @@ class _MainShellState extends State<MainShell> {
     final state = context.read<AppState>();
     await state.ready;
     if (!mounted) return;
-    final existingIndex =
-        state.profiles.indexWhere((p) => p.baseUrl == url && !p.isDirect);
+    final existingIndex = state.profiles.indexWhere(
+      (p) => p.baseUrl == url && !p.isDirect,
+    );
     state
         .saveProfile(
           GatewayProfile(name: name, baseUrl: url, apiKey: apiKey),
           index: existingIndex == -1 ? null : existingIndex,
         )
-        .then((_) => state.selectProfile(
-              existingIndex == -1 ? state.profiles.length - 1 : existingIndex,
-            ));
+        .then(
+          (_) => state.selectProfile(
+            existingIndex == -1 ? state.profiles.length - 1 : existingIndex,
+          ),
+        );
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Configured gateway "$name" ($url)')),
     );
@@ -453,11 +476,11 @@ class _MainShellState extends State<MainShell> {
               onPressed: submitting
                   ? null
                   : () => _submitAuthentication(
-                        dialogContext,
-                        setDialogState,
-                        (value) => errorMessage = value,
-                        (value) => submitting = value,
-                      ),
+                      dialogContext,
+                      setDialogState,
+                      (value) => errorMessage = value,
+                      (value) => submitting = value,
+                    ),
               child: submitting
                   ? const SizedBox.square(
                       dimension: 18,
@@ -490,9 +513,9 @@ class _MainShellState extends State<MainShell> {
       if (dialogContext.mounted && state.status != 'authenticationRequired') {
         Navigator.of(dialogContext).pop();
       } else if (dialogContext.mounted) {
-        setDialogState(() => setError(
-              state.authenticationError ?? 'Authentication failed',
-            ));
+        setDialogState(
+          () => setError(state.authenticationError ?? 'Authentication failed'),
+        );
       }
     } catch (error) {
       if (dialogContext.mounted) {
@@ -511,7 +534,11 @@ class _MainShellState extends State<MainShell> {
     SettingsScreen(),
   ];
   static const _cameraLabels = ['Cameras', 'Media', 'Settings'];
-  static const _cameraIcons = [Icons.grid_view, Icons.video_library, Icons.settings];
+  static const _cameraIcons = [
+    Icons.grid_view,
+    Icons.video_library,
+    Icons.settings,
+  ];
 
   // Direct mode has no gateway, so there's no media library to browse.
   static const _directScreens = [MultiViewScreen(), SettingsScreen()];
@@ -522,7 +549,9 @@ class _MainShellState extends State<MainShell> {
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
     if (state.status == 'authenticationRequired' && !_authDialogVisible) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _showAuthenticationDialog());
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _showAuthenticationDialog(),
+      );
     }
     final isDirect = state.isDirectMode;
     final screens = isDirect ? _directScreens : _cameraScreens;

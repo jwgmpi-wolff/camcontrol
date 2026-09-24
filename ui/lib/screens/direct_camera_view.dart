@@ -8,6 +8,8 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../main.dart';
 import '../models/direct_camera.dart';
+import '../utils/feed_health_monitor.dart';
+import '../widgets/feed_health_indicator.dart';
 
 /// Full-screen live view for one gateway-less "Direct camera". Polls the
 /// camera's own `/live.jpg` (published by live_view_publisher.py) straight
@@ -28,6 +30,7 @@ class _DirectCameraViewState extends State<DirectCameraView>
   Uint8List? _frame;
   String? _error;
   bool _fetching = false;
+  late final FeedHealthMonitor _health;
 
   // Users often paste a full browser URL (e.g. "10.0.0.252/live.html") --
   // extract just the host[:port] regardless of scheme/path they included.
@@ -54,10 +57,24 @@ class _DirectCameraViewState extends State<DirectCameraView>
     _timer = null;
   }
 
+  void _forceRefresh() {
+    _health.resume();
+    setState(() {
+      _frame = null;
+      _error = null;
+    });
+    _poll();
+  }
+
   Future<void> _poll() async {
-    if (_fetching || !mounted) return;
+    if (!mounted) return;
+    if (_fetching) {
+      setState(() {});
+      return;
+    }
     final host = _normalizedHost;
     if (host.isEmpty) {
+      _health.recordFailure();
       setState(() {
         _error = 'No camera address configured';
         _frame = null;
@@ -67,14 +84,25 @@ class _DirectCameraViewState extends State<DirectCameraView>
     _fetching = true;
     try {
       final res = await _httpClient
-          .get(Uri.parse('http://$host/live.jpg?t=${DateTime.now().millisecondsSinceEpoch}'))
+          .get(
+            Uri.parse(
+              'http://$host/live.jpg?t=${DateTime.now().millisecondsSinceEpoch}',
+            ),
+          )
           .timeout(const Duration(seconds: 10));
       if (res.statusCode != 200) {
         throw Exception('HTTP ${res.statusCode}');
       }
-      if (mounted) setState(() { _frame = res.bodyBytes; _error = null; });
+      if (mounted) {
+        _health.recordFrame(res.bodyBytes);
+        setState(() {
+          _frame = res.bodyBytes;
+          _error = null;
+        });
+      }
     } catch (e) {
       if (mounted) {
+        _health.recordFailure();
         _httpClient.close();
         _httpClient = http.Client();
         setState(() => _error = 'Unreachable: $e');
@@ -103,6 +131,7 @@ class _DirectCameraViewState extends State<DirectCameraView>
   @override
   void initState() {
     super.initState();
+    _health = FeedHealthMonitor.forPollInterval(_pollInterval);
     WidgetsBinding.instance.addObserver(this);
     _startPolling();
   }
@@ -118,7 +147,10 @@ class _DirectCameraViewState extends State<DirectCameraView>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused) _stopPolling();
-    if (state == AppLifecycleState.resumed && _timer == null) _startPolling();
+    if (state == AppLifecycleState.resumed && _timer == null) {
+      _health.resume();
+      _startPolling();
+    }
   }
 
   @override
@@ -127,6 +159,12 @@ class _DirectCameraViewState extends State<DirectCameraView>
       appBar: AppBar(
         title: Text(widget.camera.name),
         actions: [
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: FeedHealthIndicator(health: _health.status()),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.open_in_browser),
             tooltip: 'Open live.html in browser',
@@ -134,7 +172,8 @@ class _DirectCameraViewState extends State<DirectCameraView>
           ),
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _poll,
+            tooltip: 'Request a fresh image',
+            onPressed: _forceRefresh,
           ),
         ],
       ),
@@ -143,6 +182,10 @@ class _DirectCameraViewState extends State<DirectCameraView>
   }
 
   Widget _buildImage() {
+    final health = _health.status();
+    if (_frame != null && health != FeedHealth.live) {
+      return FeedUnavailable(health: health, detail: _error);
+    }
     if (_frame == null && _error == null) {
       return const CircularProgressIndicator();
     }

@@ -26,10 +26,7 @@ class ApiService {
     // App Service Easy Auth can reject an expired bearer token before the
     // gateway sees a valid API key. Gateway profiles use the API-key path.
     if (key.isNotEmpty) {
-      return {
-        'Content-Type': 'application/json',
-        'X-API-Key': key,
-      };
+      return {'Content-Type': 'application/json', 'X-API-Key': key};
     }
     final token = await _token();
     return {
@@ -61,12 +58,21 @@ class ApiService {
   }
 
   Future<List<Camera>> listCameras() async {
-    final res = await http.get(_uri('/api/cameras'), headers: await authHeaders());
+    final res = await http.get(
+      _uri('/api/cameras'),
+      headers: await authHeaders(),
+    );
     _check(res);
     final list = jsonDecode(res.body) as List;
-    return list
-        .map((e) => Camera.fromJson(e as Map<String, dynamic>))
-        .toList();
+    return list.map((e) => Camera.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  Future<void> requestCameraRefresh() async {
+    final res = await http.post(
+      _uri('/api/cameras/refresh'),
+      headers: await authHeaders(),
+    );
+    _check(res);
   }
 
   /// Scans the gateway host's own LAN subnet for candidate cameras.
@@ -91,10 +97,7 @@ class ApiService {
           _uri('/api/cameras/$cameraId/snapshot', {
             'refresh': DateTime.now().microsecondsSinceEpoch.toString(),
           }),
-          headers: {
-            ...await authHeaders(),
-            'Cache-Control': 'no-cache',
-          },
+          headers: {...await authHeaders(), 'Cache-Control': 'no-cache'},
         )
         .timeout(const Duration(seconds: 60));
     _check(res);
@@ -122,10 +125,8 @@ class ApiService {
         .toList();
   }
 
-  Uri mediaDownloadUri(String cameraId, String path) => _uri(
-        '/api/cameras/$cameraId/media/download',
-        {'path': path},
-      );
+  Uri mediaDownloadUri(String cameraId, String path) =>
+      _uri('/api/cameras/$cameraId/media/download', {'path': path});
 
   Future<Map<String, dynamic>> startRecording(String cameraId) async {
     final res = await http.post(
@@ -164,7 +165,10 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>> getConfig() async {
-    final res = await http.get(_uri('/api/config'), headers: await authHeaders());
+    final res = await http.get(
+      _uri('/api/config'),
+      headers: await authHeaders(),
+    );
     _check(res);
     return jsonDecode(res.body) as Map<String, dynamic>;
   }
@@ -187,4 +191,3 @@ class ApiService {
     _check(res);
   }
 }
-

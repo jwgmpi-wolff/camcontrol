@@ -31,3 +31,4 @@ camera_bridge = ["oncam/*"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+testpaths = ["tests"]

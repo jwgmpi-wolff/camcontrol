@@ -1,0 +1,79 @@
+name: Test and deploy camera gateway
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Dockerfile'
+      - 'pyproject.toml'
+      - 'src/camera_bridge/**'
+      - 'tests/**'
+      - '.github/workflows/deploy-gateway.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-camera-gateway
+  cancel-in-progress: false
+
+env:
+  REGISTRY: wolffacr.azurecr.io
+  IMAGE_NAME: camcontrol
+  WEBAPP_NAME: camcontrol-wolff
+
+jobs:
+  test-build-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install and test gateway
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+          pytest
+
+      - name: Sign in to Azure Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      - name: Build and push gateway image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+
+      - name: Deploy gateway image
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ env.WEBAPP_NAME }}
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+      - name: Verify gateway
+        shell: bash
+        run: |
+          for attempt in {1..30}; do
+            status="$(curl --silent --output health.json --write-out '%{http_code}' \
+              "https://${WEBAPP_NAME}.azurewebsites.net/api/health")"
+            if [ "$status" = "200" ]; then
+              cat health.json
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Gateway health check did not recover" >&2
+          exit 1

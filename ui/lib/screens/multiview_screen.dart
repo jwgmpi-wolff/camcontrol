@@ -59,9 +59,10 @@ class MultiViewScreen extends StatelessWidget {
     final name = nameCtrl.text.trim();
     final host = hostCtrl.text.trim();
     if (host.isEmpty) return;
-    await context
-        .read<AppState>()
-        .addDirectCamera(name.isEmpty ? host : name, host);
+    await context.read<AppState>().addDirectCamera(
+      name.isEmpty ? host : name,
+      host,
+    );
   }
 
   @override
@@ -86,8 +87,12 @@ class MultiViewScreen extends StatelessWidget {
                       childAspectRatio: 4 / 3,
                     ),
                     itemCount: cameras.length,
-                    itemBuilder: (context, i) =>
-                        DirectCameraTile(camera: cameras[i]),
+                    itemBuilder: (context, i) => DirectCameraTile(
+                      key: ValueKey(
+                        '${state.cameraRefreshRevision}-${cameras[i].id}',
+                      ),
+                      camera: cameras[i],
+                    ),
                   );
                 },
               ),
@@ -105,7 +110,8 @@ class MultiViewScreen extends StatelessWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: () => state.refreshCameras(),
+            tooltip: 'Request fresh camera images',
+            onPressed: () => state.forceRefreshCameras(),
           ),
         ],
       ),
@@ -115,29 +121,28 @@ class MultiViewScreen extends StatelessWidget {
               error: state.connectionError,
             )
           : state.cameras.isEmpty
-              ? const _NoCameras()
-              : LayoutBuilder(
-                  builder: (context, constraints) {
-                    final columns = _columnsFor(constraints.maxWidth);
-                    return GridView.builder(
-                      padding: const EdgeInsets.all(12),
-                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: columns,
-                        mainAxisSpacing: 12,
-                        crossAxisSpacing: 12,
-                        childAspectRatio: 4 / 3,
-                      ),
-                      itemCount: state.cameras.length,
-                      itemBuilder: (context, i) =>
-                          CameraTile(
-                            key: ValueKey(
-                              '${state.cameraRefreshRevision}-${state.cameras[i].id}',
-                            ),
-                            camera: state.cameras[i],
-                          ),
-                    );
-                  },
-                ),
+          ? const _NoCameras()
+          : LayoutBuilder(
+              builder: (context, constraints) {
+                final columns = _columnsFor(constraints.maxWidth);
+                return GridView.builder(
+                  padding: const EdgeInsets.all(12),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: columns,
+                    mainAxisSpacing: 12,
+                    crossAxisSpacing: 12,
+                    childAspectRatio: 4 / 3,
+                  ),
+                  itemCount: state.cameras.length,
+                  itemBuilder: (context, i) => CameraTile(
+                    key: ValueKey(
+                      '${state.cameraRefreshRevision}-${state.cameras[i].id}',
+                    ),
+                    camera: state.cameras[i],
+                  ),
+                );
+              },
+            ),
     );
   }
 }
