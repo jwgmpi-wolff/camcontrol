@@ -291,7 +291,11 @@ def add_user(body: CreateUserRequest, _: None = Depends(_require_api_key)) -> di
 
 @app.get("/api/health")
 def health() -> dict:
-    return {"status": "ok", "cameras": len(state.config.cameras)}
+    return {
+        "status": "ok",
+        "cameras": len(state.config.cameras),
+        "build": os.environ.get("CAMCONTROL_BUILD_SHA", "unknown"),
+    }
 
 
 @app.get("/api/cameras", response_model=list[CameraSummary])
