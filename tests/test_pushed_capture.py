@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 from fastapi.testclient import TestClient
 
 from camera_bridge.api import (
@@ -68,10 +70,14 @@ def test_refresh_endpoint_invalidates_all_relay_snapshots(monkeypatch):
 def test_health_reports_end_to_end_feed_freshness(monkeypatch):
     now = 1000.0
     monkeypatch.setattr("camera_bridge.api.time.monotonic", lambda: now)
+    monkeypatch.setattr(
+        state.config,
+        "cameras",
+        [SimpleNamespace(id="camera-1"), SimpleNamespace(id="camera-2")],
+    )
     state.pushed_snapshots.clear()
     state._pushed_snapshot_times.clear()
     camera_ids = [camera.id for camera in state.config.cameras]
-    assert camera_ids
     state.remember_pushed_snapshot(camera_ids[0], b"frame")
 
     response = TestClient(app).get("/api/health")
