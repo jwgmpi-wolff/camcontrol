@@ -8,6 +8,7 @@ import hmac
 import logging
 import os
 import threading
+import time
 from urllib.parse import urlparse
 
 import httpx
@@ -17,11 +18,60 @@ from fastapi import FastAPI, Header, HTTPException, Request
 
 MAX_SNAPSHOT_BYTES = 8 * 1024 * 1024
 DEFAULT_TARGET = "https://camcontrol-wolff.azurewebsites.net"
+RELAY_FEED_MAX_AGE_SECONDS = 30.0
 
 app = FastAPI(title="CamControl LAN Relay")
 logger = logging.getLogger(__name__)
 _ssh_clients: dict[str, paramiko.SSHClient] = {}
 _ssh_clients_lock = threading.Lock()
+_received_at: dict[str, float] = {}
+_forwarded_at: dict[str, float] = {}
+_forward_errors: dict[str, str] = {}
+
+
+def _record_received(camera_id: str) -> None:
+    _received_at[camera_id] = time.monotonic()
+
+
+def _record_forwarded(camera_id: str) -> None:
+    _forwarded_at[camera_id] = time.monotonic()
+    _forward_errors.pop(camera_id, None)
+
+
+def _record_forward_error(camera_id: str, error: Exception) -> None:
+    _forward_errors[camera_id] = type(error).__name__
+
+
+def relay_feed_health() -> dict[str, object]:
+    now = time.monotonic()
+    camera_ids = sorted(set(_received_at) | set(_forwarded_at) | set(_forward_errors))
+    feeds: dict[str, dict[str, object]] = {}
+    for camera_id in camera_ids:
+        received_age = (
+            round(now - _received_at[camera_id], 1)
+            if camera_id in _received_at
+            else None
+        )
+        forwarded_age = (
+            round(now - _forwarded_at[camera_id], 1)
+            if camera_id in _forwarded_at
+            else None
+        )
+        feeds[camera_id] = {
+            "receiving": received_age is not None
+            and received_age <= RELAY_FEED_MAX_AGE_SECONDS,
+            "forwarding": forwarded_age is not None
+            and forwarded_age <= RELAY_FEED_MAX_AGE_SECONDS,
+            "received_seconds_ago": received_age,
+            "forwarded_seconds_ago": forwarded_age,
+            "last_error": _forward_errors.get(camera_id),
+        }
+    return {
+        "status": "ok",
+        "all_feeds_forwarding": bool(feeds)
+        and all(bool(feed["forwarding"]) for feed in feeds.values()),
+        "feeds": feeds,
+    }
 
 
 def camera_key_is_valid(camera_id: str, camera_key: str | None, master_key: str) -> bool:
@@ -125,8 +175,11 @@ async def poll_camera(camera_id: str, camera_url: str) -> None:
                     response = await client.get(camera_url)
                     response.raise_for_status()
                     payload = response.content
+                _record_received(camera_id)
                 await forward_snapshot(camera_id, payload, camera_key)
-            except httpx.HTTPError:
+                _record_forwarded(camera_id)
+            except (httpx.HTTPError, OSError, TimeoutError, paramiko.SSHException) as exc:
+                _record_forward_error(camera_id, exc)
                 logger.warning("Camera relay poll failed", exc_info=True)
             await asyncio.sleep(interval)
 
@@ -135,6 +188,11 @@ async def poll_camera(camera_id: str, camera_url: str) -> None:
 async def start_camera_poller() -> None:
     for camera_id, camera_url in configured_cameras():
         asyncio.create_task(poll_camera(camera_id, camera_url))
+
+
+@app.get("/api/health")
+def health() -> dict[str, object]:
+    return relay_feed_health()
 
 
 @app.post("/api/cameras/{camera_id}/push-snapshot")
@@ -151,10 +209,13 @@ async def push_snapshot(
     if not payload or len(payload) > MAX_SNAPSHOT_BYTES:
         raise HTTPException(status_code=400, detail="Invalid snapshot payload")
 
+    _record_received(camera_id)
     try:
         await forward_snapshot(camera_id, payload, x_camera_key)
     except httpx.HTTPError as exc:
+        _record_forward_error(camera_id, exc)
         raise HTTPException(status_code=502, detail="Gateway unavailable") from exc
+    _record_forwarded(camera_id)
     return {"status": "ok"}
 
 

@@ -89,6 +89,22 @@ class _GatewayState:
         self._pushed_snapshot_times.clear()
         return invalidated
 
+    def pushed_feed_health(self) -> list[dict[str, object]]:
+        now = time.monotonic()
+        feeds: list[dict[str, object]] = []
+        for camera in self.config.cameras:
+            received_at = self._pushed_snapshot_times.get(camera.id)
+            age = round(now - received_at, 1) if received_at is not None else None
+            feeds.append(
+                {
+                    "camera_id": camera.id,
+                    "live": age is not None
+                    and age <= _PUSHED_SNAPSHOT_MAX_AGE_SECONDS,
+                    "last_snapshot_seconds_ago": age,
+                }
+            )
+        return feeds
+
     def capture_backend_for(self, camera_id: str) -> CaptureBackend:
         backend = self._capture_backends.get(camera_id)
         if backend is not None:
@@ -291,10 +307,15 @@ def add_user(body: CreateUserRequest, _: None = Depends(_require_api_key)) -> di
 
 @app.get("/api/health")
 def health() -> dict:
+    feeds = state.pushed_feed_health()
+    live_count = sum(bool(feed["live"]) for feed in feeds)
     return {
         "status": "ok",
         "cameras": len(state.config.cameras),
         "build": os.environ.get("CAMCONTROL_BUILD_SHA", "unknown"),
+        "feeds_live": live_count,
+        "feeds_expected": len(feeds),
+        "all_feeds_live": bool(feeds) and live_count == len(feeds),
     }
 
 
@@ -303,6 +324,16 @@ def list_cameras(_: str = Depends(_require_auth)) -> list[CameraSummary]:
     return [
         CameraSummary(id=c.id, name=c.name, type=c.type) for c in state.config.cameras
     ]
+
+
+@app.get("/api/cameras/status")
+def camera_feed_status(_: str = Depends(_require_auth)) -> dict[str, object]:
+    feeds = state.pushed_feed_health()
+    return {
+        "all_feeds_live": bool(feeds)
+        and all(bool(feed["live"]) for feed in feeds),
+        "feeds": feeds,
+    }
 
 
 @app.post("/api/cameras/refresh")

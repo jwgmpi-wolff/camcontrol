@@ -5,11 +5,17 @@ from __future__ import annotations
 import hashlib
 import hmac
 
+from fastapi.testclient import TestClient
+
+from camera_bridge import lan_relay
 from camera_bridge.lan_relay import (
+    RELAY_FEED_MAX_AGE_SECONDS,
+    app,
     camera_key_for,
     camera_key_is_accepted,
     camera_key_is_valid,
     configured_cameras,
+    relay_feed_health,
 )
 
 
@@ -69,3 +75,36 @@ def test_configured_cameras_accepts_ssh_preview_sources(monkeypatch):
         ("yhs3017-1", "ssh://10.0.0.246"),
         ("yhs3017-2", "ssh://10.0.0.252"),
     ]
+
+
+def test_relay_health_tracks_successful_camera_forward(monkeypatch):
+    now = 1000.0
+    monkeypatch.setattr("camera_bridge.lan_relay.time.monotonic", lambda: now)
+    monkeypatch.delenv("CAMCONTROL_API_KEY", raising=False)
+    lan_relay._received_at.clear()
+    lan_relay._forwarded_at.clear()
+    lan_relay._forward_errors.clear()
+
+    async def successful_forward(
+        camera_id: str, payload: bytes, camera_key: str
+    ) -> None:
+        assert camera_id == "yhs3017-1"
+        assert payload == b"\xff\xd8frame\xff\xd9"
+        assert camera_key == "camera-key"
+
+    monkeypatch.setattr(lan_relay, "forward_snapshot", successful_forward)
+    response = TestClient(app).post(
+        "/api/cameras/yhs3017-1/push-snapshot",
+        content=b"\xff\xd8frame\xff\xd9",
+        headers={"X-Camera-Key": "camera-key"},
+    )
+
+    assert response.status_code == 200
+    assert relay_feed_health()["all_feeds_forwarding"] is True
+
+    now += RELAY_FEED_MAX_AGE_SECONDS + 1
+    health = relay_feed_health()
+
+    assert health["all_feeds_forwarding"] is False
+    assert health["feeds"]["yhs3017-1"]["receiving"] is False
+    assert health["feeds"]["yhs3017-1"]["forwarding"] is False

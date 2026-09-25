@@ -7,6 +7,7 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <unistd.h>
 
 #define BUFFER_SIZE 16384
@@ -80,13 +81,20 @@ static int send_frame(const char *host, const char *port, const char *camera_id,
     struct stat view_stat;
     char header[2048];
     char buffer[BUFFER_SIZE];
+    char response[64];
     int view_fd, socket_fd;
+    off_t remaining;
     ssize_t read_size;
+    struct timeval timeout;
     if (stat(VIEW_PATH, &view_stat) != 0 || view_stat.st_size <= 0) return -1;
     view_fd = open(VIEW_PATH, O_RDONLY);
     if (view_fd < 0) return -1;
     socket_fd = connect_relay(host, port);
     if (socket_fd < 0) { close(view_fd); return -1; }
+    timeout.tv_sec = 120;
+    timeout.tv_usec = 0;
+    setsockopt(socket_fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
+    setsockopt(socket_fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
     snprintf(header, sizeof(header),
         "POST /api/cameras/%s/push-snapshot HTTP/1.1\r\n"
         "Host: %s\r\nContent-Type: video/h264\r\n"
@@ -94,12 +102,26 @@ static int send_frame(const char *host, const char *port, const char *camera_id,
         "Connection: close\r\n\r\n",
         camera_id, host, (long)view_stat.st_size, camera_key);
     if (write_all(socket_fd, header, strlen(header)) != 0) goto failed;
-    while ((read_size = read(view_fd, buffer, sizeof(buffer))) > 0) {
+    remaining = view_stat.st_size;
+    while (remaining > 0) {
+        size_t requested = remaining < (off_t)sizeof(buffer)
+            ? (size_t)remaining
+            : sizeof(buffer);
+        read_size = read(view_fd, buffer, requested);
+        if (read_size <= 0) goto failed;
         if (write_all(socket_fd, buffer, (size_t)read_size) != 0) goto failed;
+        remaining -= read_size;
     }
-    close(socket_fd);
     close(view_fd);
-    return read_size < 0 ? -1 : 0;
+    shutdown(socket_fd, SHUT_WR);
+    read_size = recv(socket_fd, response, sizeof(response) - 1, 0);
+    if (read_size <= 0) {
+        close(socket_fd);
+        return -1;
+    }
+    response[read_size] = '\0';
+    close(socket_fd);
+    return strncmp(response, "HTTP/1.1 2", 10) == 0 ? 0 : -1;
 failed:
     close(socket_fd);
     close(view_fd);

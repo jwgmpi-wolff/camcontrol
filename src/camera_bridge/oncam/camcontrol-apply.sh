@@ -138,7 +138,8 @@ cc_push_snapshots() {
                         *:*) _host=${_address%:*}; _port=${_address##*:} ;;
                         *) _host=$_address; _port=80 ;;
                     esac
-                    _length=$(cc_tool wc -c </tmp/view 2>/dev/null | tr -d ' ')
+                    set -- $(ls -l /tmp/view 2>/dev/null)
+                    _length=$5
                     case "$_length" in
                         ''|*[!0-9]*) cc_log "push: could not measure preview buffer" ;;
                         *) {
@@ -148,7 +149,7 @@ cc_push_snapshots() {
                             printf 'Content-Length: %s\r\n' "$_length"
                             printf 'X-%s: %s\r\n' "Camera-Key" "$_key"
                             printf 'Connection: close\r\n\r\n'
-                            cat /tmp/view
+                            cc_tool dd if=/tmp/view bs="$_length" count=1 2>/dev/null
                         } | cc_tool nc -w 15 "$_host" "$_port" >/dev/null 2>&1 ;;
                     esac
                     ;;

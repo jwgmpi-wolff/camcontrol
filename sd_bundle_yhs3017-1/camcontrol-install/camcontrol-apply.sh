@@ -124,14 +124,37 @@ cc_push_snapshots() {
     _uploader="$CAMCONTROL_DIR/bin/camcontrol-uploader"
     [ -x "$_uploader" ] || { cc_log "push: uploader missing, skipping"; return 0; }
 
-    # The firmware updates /tmp/view continuously. Copying first avoids wget
-    # reading a moving mmap buffer for the entire HTTPS upload.
     while :; do
         if [ -s /tmp/view ]; then
-            "$_uploader" \
-                -endpoint "$_endpoint/api/cameras/$_id/push-snapshot" \
-                -key "$_key" \
-                -file /tmp/view >/dev/null 2>&1
+            case "$_endpoint" in
+                http://*)
+                    _address=${_endpoint#http://}
+                    case "$_address" in
+                        *:*) _host=${_address%:*}; _port=${_address##*:} ;;
+                        *) _host=$_address; _port=80 ;;
+                    esac
+                    set -- $(ls -l /tmp/view 2>/dev/null)
+                    _length=$5
+                    case "$_length" in
+                        ''|*[!0-9]*) cc_log "push: could not measure preview buffer" ;;
+                        *) {
+                            printf 'POST /api/cameras/%s/push-snapshot HTTP/1.1\r\n' "$_id"
+                            printf 'Host: %s\r\n' "$_host"
+                            printf 'Content-Type: video/h264\r\n'
+                            printf 'Content-Length: %s\r\n' "$_length"
+                            printf 'X-Camera-Key: %s\r\n' "$_key"
+                            printf 'Connection: close\r\n\r\n'
+                            cc_tool dd if=/tmp/view bs="$_length" count=1 2>/dev/null
+                        } | cc_tool nc -w 15 "$_host" "$_port" >/dev/null 2>&1 ;;
+                    esac
+                    ;;
+                *)
+                    "$_uploader" \
+                        -endpoint "$_endpoint/api/cameras/$_id/push-snapshot" \
+                        -key "$_key" \
+                        -file /tmp/view >/dev/null 2>&1
+                    ;;
+            esac
         fi
         sleep "$_interval"
     done

@@ -86,6 +86,32 @@ Optional environment variables:
 Camera settings are stored in the gitignored `config/cameras.json`. Configure
 cameras in the app instead of committing camera addresses or credentials.
 
+## Keep The LAN Relay Running On Windows
+
+Constrained cameras send snapshots to the LAN relay on TCP port `21417`, and
+the relay forwards them to the Azure gateway. Install it as a boot-time SYSTEM
+task from an elevated PowerShell window:
+
+```powershell
+.\scripts\install-lan-relay.ps1
+```
+
+The installer creates a local-subnet-only firewall rule, starts the relay at
+Windows boot, retries it after failures, and checks every five minutes that
+the task is still running. Relay logs are written to `logs\lan-relay.log`.
+
+Verify each hop:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:21417/api/health
+Invoke-RestMethod https://camcontrol-wolff.azurewebsites.net/api/health
+```
+
+The local response reports whether each camera is reaching and forwarding
+through the relay. The Azure response reports `feeds_live`, `feeds_expected`,
+and `all_feeds_live`. A powered camera light does not imply a live feed; only
+recent successful snapshot delivery does.
+
 ## Install The Android App
 
 1. Open the [latest APK download](https://github.com/jwgmpi-wolff/camcontrol/releases/download/latest/app-release.apk).
