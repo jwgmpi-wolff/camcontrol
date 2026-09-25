@@ -91,9 +91,6 @@ cc_apply_admin_account() {
 cc_announce() {
     _endpoint=$(cc_get api_endpoint "")
     [ -n "$_endpoint" ] || return 0
-    case "$_endpoint" in
-        http://*) cc_log "announce: relay endpoint; skipping"; return 0 ;;
-    esac
     _key=$(cc_get api_key "")
     _id=$(cc_get camera_id "")
     _iface=$(cc_wifi_iface)
@@ -124,42 +121,17 @@ cc_push_snapshots() {
     _interval=$(cc_get push_interval_seconds 5)
     case "$_interval" in ''|*[!0-9]*|0) return 0 ;; esac
     [ -n "$_endpoint" ] && [ -n "$_key" ] && [ -n "$_id" ] || return 0
-    if [ -x "$CAMCONTROL_DIR/bin/camcontrol-streamer" ]; then
-        case "$_endpoint" in
-            http://*) exec "$CAMCONTROL_DIR/bin/camcontrol-streamer" ;;
-        esac
-    fi
+    _uploader="$CAMCONTROL_DIR/bin/camcontrol-uploader"
+    [ -x "$_uploader" ] || { cc_log "push: uploader missing, skipping"; return 0; }
+
+    # The firmware updates /tmp/view continuously. Copying first avoids wget
+    # reading a moving mmap buffer for the entire HTTPS upload.
     while :; do
         if [ -s /tmp/view ]; then
-            case "$_endpoint" in
-                http://*)
-                    _address=${_endpoint#http://}
-                    case "$_address" in
-                        *:*) _host=${_address%:*}; _port=${_address##*:} ;;
-                        *) _host=$_address; _port=80 ;;
-                    esac
-                    _length=$(cc_tool wc -c </tmp/view 2>/dev/null | tr -d ' ')
-                    case "$_length" in
-                        ''|*[!0-9]*) cc_log "push: could not measure preview buffer" ;;
-                        *) {
-                            printf 'POST /api/cameras/%s/push-snapshot HTTP/1.1\r\n' "$_id"
-                            printf 'Host: %s\r\n' "$_host"
-                            printf 'Content-Type: video/h264\r\n'
-                            printf 'Content-Length: %s\r\n' "$_length"
-                            printf 'X-%s: %s\r\n' "Camera-Key" "$_key"
-                            printf 'Connection: close\r\n\r\n'
-                            cat /tmp/view
-                        } | cc_tool nc -w 15 "$_host" "$_port" >/dev/null 2>&1 ;;
-                    esac
-                    ;;
-                *)
-                    _uploader="$CAMCONTROL_DIR/bin/camcontrol-uploader"
-                    [ -x "$_uploader" ] && "$_uploader" \
-                        -endpoint "$_endpoint/api/cameras/$_id/push-snapshot" \
-                        -key "$_key" \
-                        -file /tmp/view >/dev/null 2>&1
-                    ;;
-            esac
+            "$_uploader" \
+                -endpoint "$_endpoint/api/cameras/$_id/push-snapshot" \
+                -key "$_key" \
+                -file /tmp/view >/dev/null 2>&1
         fi
         sleep "$_interval"
     done

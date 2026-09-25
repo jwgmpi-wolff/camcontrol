@@ -62,5 +62,6 @@ to stay in the camera afterward.
 Per the upstream report, this firmware variant is not confirmed to expose a
 built-in RTSP/ONVIF restreamer on this camera either. Verify what local
 streaming/access is actually available (web UI "About" page, SSH) before
-wiring it into CamControl's capture pipeline the same way camera #1/#2 use
+wiring it into the Wolff IoT Platform for Cameras' capture pipeline the same
+way camera #1/#2 use
 the `/tmp/view` SSH capture fallback.

@@ -58,13 +58,21 @@ class GatewayProfile {
         ),
       ];
     }
+    final mode = json['mode'] as String? ?? 'gateway';
+    var baseUrl = json['baseUrl'] as String;
+    if (mode == 'gateway') {
+      final uri = Uri.tryParse(baseUrl);
+      if (uri != null && uri.hasPort && uri.port == 8080) {
+        baseUrl = uri.replace(port: 21416).toString();
+      }
+    }
     return GatewayProfile(
       name: json['name'] as String,
-      baseUrl: json['baseUrl'] as String,
+      baseUrl: baseUrl,
       apiKey: json['apiKey'] as String? ?? '',
       username: json['username'] as String? ?? '',
       token: json['token'] as String? ?? '',
-      mode: json['mode'] as String? ?? 'gateway',
+      mode: mode,
       directCameras: cameras,
     );
   }

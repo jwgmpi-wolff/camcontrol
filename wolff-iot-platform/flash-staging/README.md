@@ -37,4 +37,5 @@ This firmware's documented feature set (SSH, Telnet, FTP, local web UI,
 proxychains-ng) does not include a confirmed built-in RTSP/ONVIF restreamer
 the way the Allwinner-targeted alternative firmware does. After flashing,
 verify what local streaming/access is actually available before wiring it into
-CamControl's capture pipeline -- don't assume `rtsp://<ip>/ch0_0.264` works here.
+the Wolff IoT Platform for Cameras' capture pipeline -- don't assume
+`rtsp://<ip>/ch0_0.264` works here.

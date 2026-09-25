@@ -21,8 +21,15 @@ Flutter app ---- HTTP ----> FastAPI gateway ---- SSH/RTSP ----> Cameras
      +---- direct HTTP ---------------------------------------> Cameras
 ```
 
-- **Gateway mode** connects the app to the Python API on port `8080`.
+- **Gateway mode** connects the app to the Python API on port `21416`.
 - **Direct mode** loads camera-hosted live views without the gateway UI.
+- Camera tiles continuously monitor feed health and report **Live**,
+  **Stalled** (the image has stopped changing), or **Offline** (updates have
+  timed out or repeatedly failed). Stalled and offline feeds hide the last
+  image so old footage cannot be mistaken for a current view.
+- The app refresh button sends a refresh request to the gateway, invalidates
+  cached relay snapshots, and waits for new camera uploads before showing
+  footage again.
 - The gateway can capture images, publish camera live-view pages, record video,
   report motion status, and route captures to configured storage.
 
@@ -31,7 +38,7 @@ Flutter app ---- HTTP ----> FastAPI gateway ---- SSH/RTSP ----> Cameras
 Gateway and direct-camera profiles use different URLs:
 
 - **Gateway mode:** enter the FastAPI gateway URL, for example
-  `http://192.168.1.20:8080`. Port `8080` is the gateway API port; it is not the
+  `http://192.168.1.20:21416`. Port `21416` is the gateway API port; it is not the
   camera live-view address.
 - **Direct-camera mode:** enter the camera address or its complete live-view
   URL, for example `192.168.1.50` or `http://192.168.1.50/live.html`.
@@ -62,10 +69,10 @@ py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m camera_bridge.main
 ```
 
-The API listens on `http://0.0.0.0:8080` by default. Verify it locally:
+The API listens on `http://0.0.0.0:21416` by default. Verify it locally:
 
 ```powershell
-Invoke-RestMethod http://127.0.0.1:8080/api/health
+Invoke-RestMethod http://127.0.0.1:21416/api/health
 ```
 
 Optional environment variables:
@@ -73,7 +80,7 @@ Optional environment variables:
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `HOST` | `0.0.0.0` | Gateway bind address |
-| `PORT` | `8080` | Gateway port |
+| `PORT` | `21416` | Gateway port |
 | `API_KEY` | unset | Protect administrative API operations when set |
 
 Camera settings are stored in the gitignored `config/cameras.json`. Configure

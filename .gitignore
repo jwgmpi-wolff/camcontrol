@@ -12,6 +12,8 @@ data/snapshots/
 
 # Scratch/working directories -- never committed
 build_tmp/
+captures/
+.vscode/
 
 # Camera configs can accumulate real secrets (SSH passwords, storage keys)
 # as the app is used -- keep the live config out of git.
