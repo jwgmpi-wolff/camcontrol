@@ -110,7 +110,9 @@ Invoke-RestMethod https://camcontrol-wolff.azurewebsites.net/api/health
 The local response reports whether each camera is reaching and forwarding
 through the relay. The Azure response reports `feeds_live`, `feeds_expected`,
 and `all_feeds_live`. A powered camera light does not imply a live feed; only
-recent successful snapshot delivery does.
+recent successful snapshot delivery does. GitHub Actions also checks this
+Azure health signal every five minutes in the **Monitor production camera
+feeds** workflow.
 
 ## Install The Android App
 

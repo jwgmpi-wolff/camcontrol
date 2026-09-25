@@ -1,0 +1,49 @@
+name: Monitor production camera feeds
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: monitor-production-camera-feeds
+  cancel-in-progress: true
+
+jobs:
+  verify-feed-freshness:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every configured feed to be fresh
+        shell: bash
+        env:
+          HEALTH_URL: https://camcontrol-wolff.azurewebsites.net/api/health
+        run: |
+          for attempt in {1..3}; do
+            if curl --fail --silent --show-error \
+              --connect-timeout 10 --max-time 30 \
+              "$HEALTH_URL" --output health.json; then
+              cat health.json
+              if python - <<'PY'
+          import json
+
+          with open("health.json", encoding="utf-8") as health_file:
+              health = json.load(health_file)
+
+          expected = health.get("feeds_expected", 0)
+          live = health.get("feeds_live", 0)
+          if expected < 1 or live != expected or not health.get("all_feeds_live"):
+              raise SystemExit(
+                  f"camera feeds are not all fresh: {live}/{expected} live"
+              )
+          PY
+              then
+                exit 0
+              fi
+            fi
+            sleep 20
+          done
+          echo "Production camera feeds remained stale after three checks." >&2
+          exit 1

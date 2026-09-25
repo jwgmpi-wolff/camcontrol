@@ -105,4 +105,18 @@ cc_run() {
     fi
 }
 
-cc_run &
+cc_start() {
+    _pidfile=/tmp/camcontrol-push-supervisor.pid
+    if [ -f "$_pidfile" ]; then
+        _pid=$(cat "$_pidfile" 2>/dev/null)
+        if [ -n "$_pid" ] && kill -0 "$_pid" 2>/dev/null; then
+            cc_log "boot: push supervisor already running"
+            return 0
+        fi
+        rm -f "$_pidfile"
+    fi
+    cc_run &
+    echo "$!" >"$_pidfile"
+}
+
+cc_start

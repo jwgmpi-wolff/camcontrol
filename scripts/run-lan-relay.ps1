@@ -23,7 +23,7 @@ while ($true) {
     }
 
     Add-Content $logPath "$(Get-Date -Format o) starting LAN relay"
-    & $python -m camera_bridge.lan_relay *>> $logPath
+    & $env:ComSpec /d /c "`"$python`" -m camera_bridge.lan_relay >> `"$logPath`" 2>&1"
     Add-Content $logPath "$(Get-Date -Format o) LAN relay exited with code $LASTEXITCODE; restarting"
     Start-Sleep -Seconds 5
 }
