@@ -46,7 +46,11 @@ class _CameraEditScreenState extends State<CameraEditScreen> {
   bool _liveViewEnabled = false;
   final _liveViewIntervalCtrl = TextEditingController(text: '3');
   final _liveViewPublicUrlCtrl = TextEditingController();
-  Map<String, dynamic>? _existingMotion;
+  bool _motionEnabled = false;
+  final _motionThresholdCtrl = TextEditingController(text: '12');
+  final _motionPollIntervalCtrl = TextEditingController(text: '2');
+  final _motionRecordSecondsCtrl = TextEditingController(text: '10');
+  final _motionCooldownCtrl = TextEditingController(text: '15');
 
   List<Map<String, dynamic>> _allCameras = [];
 
@@ -71,13 +75,21 @@ class _CameraEditScreenState extends State<CameraEditScreen> {
           _type = match['type'] as String;
           _idCtrl.text = match['id'] as String;
           _nameCtrl.text = match['name'] as String;
+            final motion = match['motion'] as Map<String, dynamic>?;
+            _motionEnabled = motion?['enabled'] as bool? ?? false;
+            _motionThresholdCtrl.text = '${motion?['threshold'] ?? 12}';
+            _motionPollIntervalCtrl.text =
+              '${motion?['poll_interval_seconds'] ?? 2}';
+            _motionRecordSecondsCtrl.text =
+              '${motion?['record_seconds'] ?? 10}';
+            _motionCooldownCtrl.text =
+              '${motion?['cooldown_seconds'] ?? 15}';
           if (_type == 'hi3518e_ssh') {
             _hostCtrl.text = match['host'] as String? ?? '';
             _portCtrl.text = '${match['port'] ?? 22}';
             _usernameCtrl.text = match['username'] as String? ?? 'root';
             _remoteViewCtrl.text = match['remote_view_path'] as String? ?? '/tmp/view';
             _remoteMediaCtrl.text = match['remote_media_dir'] as String? ?? '/tmp/sd';
-            _existingMotion = match['motion'] as Map<String, dynamic>?;
             final liveView = match['live_view'] as Map<String, dynamic>?;
             _liveViewEnabled = liveView?['enabled'] as bool? ?? false;
             _liveViewIntervalCtrl.text =
@@ -119,8 +131,21 @@ class _CameraEditScreenState extends State<CameraEditScreen> {
     _rtspPasswordCtrl.dispose();
     _liveViewIntervalCtrl.dispose();
     _liveViewPublicUrlCtrl.dispose();
+    _motionThresholdCtrl.dispose();
+    _motionPollIntervalCtrl.dispose();
+    _motionRecordSecondsCtrl.dispose();
+    _motionCooldownCtrl.dispose();
     super.dispose();
   }
+
+  Map<String, dynamic> _buildMotionConfig() => {
+        'enabled': _motionEnabled,
+        'threshold': double.parse(_motionThresholdCtrl.text.trim()),
+        'poll_interval_seconds':
+            double.parse(_motionPollIntervalCtrl.text.trim()),
+        'record_seconds': double.parse(_motionRecordSecondsCtrl.text.trim()),
+        'cooldown_seconds': double.parse(_motionCooldownCtrl.text.trim()),
+      };
 
   Map<String, dynamic> _buildEntry() {
     if (_type == 'hi3518e_ssh') {
@@ -146,7 +171,7 @@ class _CameraEditScreenState extends State<CameraEditScreen> {
             : existingPassword,
         'remote_view_path': _remoteViewCtrl.text.trim(),
         'remote_media_dir': _remoteMediaCtrl.text.trim(),
-        if (_existingMotion != null) 'motion': _existingMotion,
+        'motion': _buildMotionConfig(),
         'live_view': {
           'enabled': _liveViewEnabled,
           'poll_interval_seconds':
@@ -172,6 +197,7 @@ class _CameraEditScreenState extends State<CameraEditScreen> {
       'password': _rtspPasswordCtrl.text.isNotEmpty
           ? _rtspPasswordCtrl.text
           : existingRtspPassword,
+        'motion': _buildMotionConfig(),
     };
   }
 
@@ -272,6 +298,7 @@ class _CameraEditScreenState extends State<CameraEditScreen> {
             const SizedBox(height: 12),
             if (_type == 'hi3518e_ssh') ..._buildSshFields(),
             if (_type == 'rtsp') ..._buildRtspFields(),
+            ..._buildMotionFields(),
             const SizedBox(height: 24),
             FilledButton.icon(
               icon: _saving
@@ -288,6 +315,78 @@ class _CameraEditScreenState extends State<CameraEditScreen> {
         ),
       ),
     );
+  }
+
+  String? _positiveNumber(String? value) {
+    final number = double.tryParse(value?.trim() ?? '');
+    return number == null || number <= 0 ? 'Enter a number greater than 0' : null;
+  }
+
+  List<Widget> _buildMotionFields() {
+    return [
+      const SizedBox(height: 20),
+      const Divider(),
+      const SizedBox(height: 8),
+      Text(
+        'Motion detection',
+        style: Theme.of(context).textTheme.titleSmall,
+      ),
+      const Text(
+        'Gateway motion detection records changed frames. These controls do '
+        'not change alarms built into the camera firmware.',
+        style: TextStyle(fontSize: 12),
+      ),
+      SwitchListTile(
+        contentPadding: EdgeInsets.zero,
+        title: const Text('Enable motion detection'),
+        value: _motionEnabled,
+        onChanged: (value) => setState(() => _motionEnabled = value),
+      ),
+      TextFormField(
+        controller: _motionThresholdCtrl,
+        enabled: _motionEnabled,
+        decoration: const InputDecoration(
+          labelText: 'Change threshold',
+          helperText: 'Lower values are more sensitive',
+          border: OutlineInputBorder(),
+        ),
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        validator: _positiveNumber,
+      ),
+      const SizedBox(height: 12),
+      TextFormField(
+        controller: _motionPollIntervalCtrl,
+        enabled: _motionEnabled,
+        decoration: const InputDecoration(
+          labelText: 'Check interval (seconds)',
+          border: OutlineInputBorder(),
+        ),
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        validator: _positiveNumber,
+      ),
+      const SizedBox(height: 12),
+      TextFormField(
+        controller: _motionRecordSecondsCtrl,
+        enabled: _motionEnabled,
+        decoration: const InputDecoration(
+          labelText: 'Record after motion (seconds)',
+          border: OutlineInputBorder(),
+        ),
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        validator: _positiveNumber,
+      ),
+      const SizedBox(height: 12),
+      TextFormField(
+        controller: _motionCooldownCtrl,
+        enabled: _motionEnabled,
+        decoration: const InputDecoration(
+          labelText: 'Cooldown (seconds)',
+          border: OutlineInputBorder(),
+        ),
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        validator: _positiveNumber,
+      ),
+    ];
   }
 
   List<Widget> _buildSshFields() {
