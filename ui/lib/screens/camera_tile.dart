@@ -1,7 +1,8 @@
 import 'dart:async';
-import 'dart:typed_data';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../main.dart';
@@ -21,6 +22,8 @@ class CameraTile extends StatefulWidget {
 }
 
 class _CameraTileState extends State<CameraTile> with WidgetsBindingObserver {
+  static const _audioChannel = MethodChannel('camcontrol/audio');
+
   Timer? _timer;
   Uint8List? _frame;
   String? _error;
@@ -28,6 +31,8 @@ class _CameraTileState extends State<CameraTile> with WidgetsBindingObserver {
   bool _recording = false;
   bool _busy = false;
   late final FeedHealthMonitor _health;
+  bool _talking = false;
+  Timer? _talkTimer;
 
   Duration _pollInterval(BuildContext context) {
     final override = context.read<AppState>().pollIntervalSeconds;
@@ -114,6 +119,64 @@ class _CameraTileState extends State<CameraTile> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _toggleTalk() async {
+    if (_busy) return;
+    if (_talking) {
+      await _sendVoiceMessage();
+      return;
+    }
+
+    final messenger = ScaffoldMessenger.of(context);
+    final permitted =
+        await _audioChannel.invokeMethod<bool>('requestPermission') ?? false;
+    if (!permitted) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Microphone permission is required')),
+      );
+      return;
+    }
+
+    try {
+      await _audioChannel.invokeMethod<String>('start');
+      if (!mounted) return;
+      setState(() => _talking = true);
+      _talkTimer = Timer(const Duration(seconds: 30), _sendVoiceMessage);
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Could not start microphone: $e')),
+      );
+    }
+  }
+
+  Future<void> _sendVoiceMessage() async {
+    if (!_talking) return;
+    _talkTimer?.cancel();
+    _talkTimer = null;
+    setState(() {
+      _talking = false;
+      _busy = true;
+    });
+    final messenger = ScaffoldMessenger.of(context);
+    final api = context.read<AppState>().api;
+    try {
+      final path = await _audioChannel.invokeMethod<String>('stop');
+      if (path == null) throw StateError('No audio was recorded');
+      final file = File(path);
+      final audio = await file.readAsBytes();
+      await api.playVoiceMessage(widget.camera.id, audio);
+      await file.delete().catchError((_) => file);
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Voice message played on camera')),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Voice message failed: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -125,6 +188,8 @@ class _CameraTileState extends State<CameraTile> with WidgetsBindingObserver {
   @override
   void dispose() {
     _stopPolling();
+    _talkTimer?.cancel();
+    if (_talking) unawaited(_audioChannel.invokeMethod<String>('stop'));
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -168,6 +233,19 @@ class _CameraTileState extends State<CameraTile> with WidgetsBindingObserver {
                   visualDensity: VisualDensity.compact,
                   onPressed: _busy ? null : _takeSnapshot,
                 ),
+                if (widget.camera.type == 'hi3518e_ssh')
+                  IconButton(
+                    icon: Icon(
+                      _talking ? Icons.stop_circle : Icons.mic,
+                      size: 18,
+                      color: _talking ? Colors.red : null,
+                    ),
+                    tooltip: _talking
+                        ? 'Stop and play voice message'
+                        : 'Talk through camera speaker',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: _busy ? null : _toggleTalk,
+                  ),
                 IconButton(
                   icon: Icon(
                     _recording ? Icons.stop_circle : Icons.fiber_manual_record,

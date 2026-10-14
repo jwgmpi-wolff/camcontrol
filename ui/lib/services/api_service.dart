@@ -113,6 +113,15 @@ class ApiService {
     return jsonDecode(res.body) as Map<String, dynamic>;
   }
 
+  Future<void> playVoiceMessage(String cameraId, Uint8List audio) async {
+    final res = await http.post(
+      _uri('/api/cameras/$cameraId/voice-message'),
+      headers: {...await authHeaders(), 'Content-Type': 'audio/mp4'},
+      body: audio,
+    );
+    _check(res);
+  }
+
   Future<List<MediaFile>> listMedia(String cameraId) async {
     final res = await http.get(
       _uri('/api/cameras/$cameraId/media'),
