@@ -8,15 +8,32 @@ refresh intervals.
 <!-- project-downloads:start -->
 ## APK and installer downloads
 
-| Package | Download | Source |
+Every available project package is indexed below, including older versions. Prefer the newest stable version for your platform and architecture. Debug APKs and prereleases are labeled; archives are not necessarily standalone installers.
+
+### Release downloads: all published versions
+
+| Version / source | Package | Download |
 | --- | --- | --- |
-| Android APK | [app-release.apk](https://github.com/jwgmpi-wolff/camcontrol/releases/download/latest/app-release.apk) | latest |
+| latest | Android APK | [app-release.apk](https://github.com/jwgmpi-wolff/camcontrol/releases/download/latest/app-release.apk) |
 
-Android may require approval to install apps from this download source. Debug APKs are labeled above. Windows executables that are not setup packages may require accompanying project files; follow the project-specific instructions below.
+### Repository-hosted packages: all available versions
 
-- [Download the complete source ZIP](https://github.com/jwgmpi-wolff/camcontrol/archive/refs/heads/main.zip).
-- [Setup script: sd_bundle_yhs3017-1/camcontrol-install/install.sh](./sd_bundle_yhs3017-1/camcontrol-install/install.sh) (download and extract the complete source ZIP first).
-- [Setup script: src/camera_bridge/oncam/install.sh](./src/camera_bridge/oncam/install.sh) (download and extract the complete source ZIP first).
+| Version / source | Package | Download |
+| --- | --- | --- |
+| repository | Android APK | [releases/camcontrol.apk](https://github.com/jwgmpi-wolff/camcontrol/raw/refs/heads/main/releases/camcontrol.apk) |
+
+Git LFS links download the package itself, not a pointer file. Executables without a setup wrapper may require accompanying project files.
+
+### Setup scripts and source
+
+- [Setup script: scripts/install-lan-relay.ps1](./scripts/install-lan-relay.ps1)
+- [Setup script: sd_bundle_yhs3017-1/camcontrol-install/install.sh](./sd_bundle_yhs3017-1/camcontrol-install/install.sh)
+- [Setup script: src/camera_bridge/oncam/install.sh](./src/camera_bridge/oncam/install.sh)
+
+- [Download the complete source ZIP](https://github.com/jwgmpi-wolff/camcontrol/archive/refs/heads/main.zip). Extract the complete checkout before running setup scripts unless the project instructions explicitly support standalone installation.
+- [Browse all releases and their assets](https://github.com/jwgmpi-wolff/camcontrol/releases).
+
+Android may require approval to install apps from the download source. Follow the project-specific installation, signing, checksum, and prerequisite instructions elsewhere in this README.
 <!-- project-downloads:end -->
 
 ## Download
