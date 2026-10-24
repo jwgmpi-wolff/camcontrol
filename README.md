@@ -5,6 +5,20 @@ owner-authorized camera management. It supports gateway and direct-camera
 profiles, snapshots, recordings, motion status, and configurable live-view
 refresh intervals.
 
+<!-- project-downloads:start -->
+## APK and installer downloads
+
+| Package | Download | Source |
+| --- | --- | --- |
+| Android APK | [app-release.apk](https://github.com/jwgmpi-wolff/camcontrol/releases/download/latest/app-release.apk) | latest |
+
+Android may require approval to install apps from this download source. Debug APKs are labeled above. Windows executables that are not setup packages may require accompanying project files; follow the project-specific instructions below.
+
+- [Download the complete source ZIP](https://github.com/jwgmpi-wolff/camcontrol/archive/refs/heads/main.zip).
+- [Setup script: sd_bundle_yhs3017-1/camcontrol-install/install.sh](./sd_bundle_yhs3017-1/camcontrol-install/install.sh) (download and extract the complete source ZIP first).
+- [Setup script: src/camera_bridge/oncam/install.sh](./src/camera_bridge/oncam/install.sh) (download and extract the complete source ZIP first).
+<!-- project-downloads:end -->
+
 ## Download
 
 - [Download the latest Android APK](https://github.com/jwgmpi-wolff/camcontrol/releases/download/latest/app-release.apk)
@@ -163,3 +177,9 @@ camcontrol/
 ```
 
 Report problems through [GitHub Issues](https://github.com/jwgmpi-wolff/camcontrol/issues).
+
+## Copyright
+
+Copyright (c) 2026 Jerry Wolff. See [COPYRIGHT](COPYRIGHT) for the scope of this
+notice. Existing licenses and third-party attribution remain unchanged; this
+notice does not grant additional permissions.
